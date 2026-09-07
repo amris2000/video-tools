@@ -8,6 +8,10 @@ from videotools.journal import (
     list_journal_entries,
 )
 
+from videotools.organize import organize_clips
+from videotools.thumbnails import (
+    generate_project_thumbnails,
+)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -30,6 +34,22 @@ def main():
     subparsers.add_parser(
         "probe",
         help="Analyze video clips in the current project.",
+    )
+
+    subparsers.add_parser(
+        "organize",
+        help="Move loose clips into date folders.",
+    )
+
+    thumbnail_parser = subparsers.add_parser(
+        "thumbnails",
+        help="Generate thumbnails for video clips.",
+    )
+
+    thumbnail_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate thumbnails that already exist.",
     )
 
     journal_parser = subparsers.add_parser(
@@ -84,6 +104,15 @@ def main():
 
     elif args.command == "probe":
         analyze_project(project_root)
+
+    elif args.command == "thumbnails":
+        generate_project_thumbnails(
+            project_root,
+            force=args.force,
+        )
+
+    elif args.command == "organize":
+        organize_clips(project_root)
 
     elif args.command == "journal":
         if args.journal_command == "add":

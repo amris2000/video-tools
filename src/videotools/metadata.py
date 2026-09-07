@@ -5,19 +5,12 @@ import shutil
 import subprocess
 from html import escape
 from videotools.journal import load_journal
-
+from videotools.thumbnails import thumbnail_name
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import tomllib
 
-VIDEO_EXTENSIONS = {
-    ".mp4",
-    ".mov",
-    ".mkv",
-    ".avi",
-    ".m4v",
-}
-
+from videotools.media import VIDEO_EXTENSIONS
 
 
 def parse_creation_time(
@@ -434,6 +427,24 @@ def generate_html_report(
                 or "Unknown"
             )
 
+            thumbnail = clip.get("thumbnail")
+
+            thumbnail_html = ""
+
+            if thumbnail:
+                thumbnail_relative = Path(
+                    thumbnail
+                ).relative_to("metadata")
+
+                thumbnail_html = f"""
+                <img
+                    class="clip-thumbnail"
+                    src="{escape(thumbnail_relative.as_posix())}"
+                    alt="{escape(clip["name"])}"
+                    loading="lazy"
+                >
+                """
+
             audio_text = "No audio"
 
             if audio:
@@ -469,6 +480,7 @@ def generate_html_report(
             cards.append(
                 f"""
                 <article class="clip-card">
+                    {thumbnail_html}
                     <div class="clip-header">
                         <div>
                             <h3>{escape(clip["name"])}</h3>
@@ -621,6 +633,16 @@ def generate_html_report(
 
         .subtitle {{
             color: #6b7280;
+        }}
+
+        .clip-thumbnail {{
+            display: block;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            background: #e5e7eb;
         }}
 
         .summary {{
@@ -1039,13 +1061,30 @@ def analyze_project(project_root: Path) -> dict:
             timezone_name,
         )
 
+        thumbnail_filename = thumbnail_name(
+            clip,
+            project_root,
+        )
+
+        thumbnail_file = (
+            project_root
+            / "metadata"
+            / "thumbnails"
+            / thumbnail_filename
+        )
+
         clip_info = {
             "name": clip.name,
+
 
             "relative_path": clip.relative_to(
                 project_root
             ).as_posix(),
-
+            "thumbnail": (
+                f"metadata/thumbnails/{thumbnail_filename}"
+                if thumbnail_file.exists()
+                else None
+            ),
             "size_bytes": file_size,
 
             "creation_time": creation_time,

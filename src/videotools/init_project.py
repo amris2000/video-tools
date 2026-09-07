@@ -19,6 +19,10 @@ def create_project(name: str, parent: Path | None = None) -> Path:
     (project_dir / "clips").mkdir()
     (project_dir / "metadata").mkdir()
     (project_dir / "exports").mkdir()
+    (project_dir / "metadata" / "thumbnails").mkdir(
+        parents=True
+    )
+
 
     # Create project.toml
     project_toml = f"""\
