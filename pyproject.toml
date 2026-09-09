@@ -2,20 +2,18 @@
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-
 [project]
 name = "video-tools"
 version = "0.1.0"
 description = "Personal Python tools for video ingest, metadata, journaling, and DaVinci Resolve workflows."
 readme = "README.md"
 requires-python = ">=3.11"
-
-dependencies = []
-
+dependencies = [
+    "tzdata",
+]
 
 [project.scripts]
 video-tools = "videotools.cli:main"
-
 
 [tool.setuptools.packages.find]
 where = ["src"]
