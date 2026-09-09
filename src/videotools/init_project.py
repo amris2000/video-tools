@@ -2,10 +2,16 @@ from pathlib import Path
 import json
 
 
-def create_project(name: str, parent: Path | None = None) -> Path:
+def create_project(
+    name: str,
+    parent: Path | None = None,
+) -> Path:
     """Create a new video-tools project."""
 
-    parent = Path(parent or Path.cwd()).resolve()
+    parent = Path(
+        parent or Path.cwd()
+    ).resolve()
+
     project_dir = parent / name
 
     if project_dir.exists():
@@ -17,16 +23,21 @@ def create_project(name: str, parent: Path | None = None) -> Path:
     project_dir.mkdir()
 
     (project_dir / "clips").mkdir()
-    (project_dir / "metadata").mkdir()
-    (project_dir / "exports").mkdir()
-    (project_dir / "metadata" / "thumbnails").mkdir(
+
+    (
+        project_dir
+        / "metadata"
+        / "thumbnails"
+    ).mkdir(
         parents=True
     )
 
+    (project_dir / "exports").mkdir()
 
     # Create project.toml
     project_toml = f"""\
 name = "{name}"
+timezone = "Europe/Copenhagen"
 
 [paths]
 clips = "clips"
@@ -38,7 +49,10 @@ journal = "journal.json"
 project_name = "{name}"
 """
 
-    (project_dir / "project.toml").write_text(
+    (
+        project_dir
+        / "project.toml"
+    ).write_text(
         project_toml,
         encoding="utf-8",
     )
@@ -48,8 +62,14 @@ project_name = "{name}"
         "entries": []
     }
 
-    (project_dir / "journal.json").write_text(
-        json.dumps(journal, indent=2),
+    (
+        project_dir
+        / "journal.json"
+    ).write_text(
+        json.dumps(
+            journal,
+            indent=2,
+        ),
         encoding="utf-8",
     )
 

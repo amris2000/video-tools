@@ -11,7 +11,92 @@ from zoneinfo import ZoneInfo
 import tomllib
 
 from videotools.media import VIDEO_EXTENSIONS
+import shutil
+import subprocess
+import json
 
+def empty_gps() -> dict:
+    return {
+        "available": False,
+        "latitude": None,
+        "longitude": None,
+        "altitude": None,
+        "speed": None,
+        "datetime": None,
+    }
+
+
+def get_gopro_metadata_stream(info: dict) -> dict | None:
+    return next(
+        (
+            stream
+            for stream in info.get("streams", [])
+            if (
+                stream.get("codec_type") == "data"
+                and stream.get("codec_tag_string") == "gpmd"
+            )
+        ),
+        None,
+    )
+
+
+def extract_gps(path: Path) -> dict:
+    exiftool = shutil.which("exiftool")
+
+    if exiftool is None:
+        print(
+            "  GPS: ExifTool not found on PATH"
+        )
+        return empty_gps()
+
+    command = [
+        exiftool,
+        "-j",
+        "-n",
+        "-ee",
+        "-GPSLatitude",
+        "-GPSLongitude",
+        "-GPSAltitude",
+        "-GPSSpeed",
+        "-GPSDateTime",
+        str(path),
+    ]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        data = json.loads(result.stdout)
+
+    except (
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+    ):
+        return empty_gps()
+
+    if not data:
+        return empty_gps()
+
+    metadata = data[0]
+
+    latitude = metadata.get("GPSLatitude")
+    longitude = metadata.get("GPSLongitude")
+
+    if latitude is None or longitude is None:
+        return empty_gps()
+
+    return {
+        "available": True,
+        "latitude": latitude,
+        "longitude": longitude,
+        "altitude": metadata.get("GPSAltitude"),
+        "speed": metadata.get("GPSSpeed"),
+        "datetime": metadata.get("GPSDateTime"),
+    }
 
 def parse_creation_time(
     value: str | None,
@@ -1003,6 +1088,15 @@ def analyze_project(project_root: Path) -> dict:
 
         try:
             info = probe_video(clip)
+
+            gopro_metadata_stream = get_gopro_metadata_stream(
+                info
+            )
+
+            if gopro_metadata_stream:
+                gps = extract_gps(clip)
+            else:
+                gps = empty_gps()
         except subprocess.CalledProcessError as error:
             print(f"WARNING: ffprobe failed for {clip}")
             print(error.stderr)
@@ -1108,7 +1202,12 @@ def analyze_project(project_root: Path) -> dict:
             },
 
             "audio": None,
-
+            "telemetry": {
+                "gopro_metadata": (
+                    gopro_metadata_stream is not None
+                ),
+                "gps": gps,
+            },
             "journal": None,
         }
 

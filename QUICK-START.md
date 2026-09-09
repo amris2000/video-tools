@@ -14,4 +14,8 @@ cd C:\Users\Frederik\Videos\Projects\scripting-test
 
 Now run:
 
-video-tools project
+video-tools project ??
+
+video-tools organize
+video-tools thumbnails
+video-tools probe
