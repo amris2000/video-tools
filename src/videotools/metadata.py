@@ -258,7 +258,28 @@ def load_project_config(project_root: Path) -> dict:
     with config_file.open("rb") as file:
         return tomllib.load(file)
 
-def analyze_project(project_root: Path) -> dict:
+def load_existing_report(
+    report_file: Path,
+) -> dict | None:
+    if not report_file.exists():
+        return None
+
+    try:
+        return json.loads(
+            report_file.read_text(
+                encoding="utf-8",
+            )
+        )
+    except (
+        json.JSONDecodeError,
+        OSError,
+    ):
+        return None
+
+def analyze_project(
+    project_root: Path,
+    force: bool = False,
+) -> dict:
     project_root = Path(project_root).resolve()
 
     config = load_project_config(project_root)
@@ -272,6 +293,25 @@ def analyze_project(project_root: Path) -> dict:
     metadata_dir = project_root / "metadata"
 
     report_file = metadata_dir / "clip_report.json"
+
+    existing_report = (
+        None
+        if force
+        else load_existing_report(report_file)
+    )
+
+    existing_clips = {}
+
+    if existing_report:
+        existing_clips = {
+            clip["relative_path"]: clip
+            for clip in existing_report.get(
+                "clips",
+                [],
+            )
+            if clip.get("relative_path")
+        }
+
     html_report_file = metadata_dir / "clip_report.html"
 
     journal_file = project_root / "journal.json"
@@ -300,7 +340,57 @@ def analyze_project(project_root: Path) -> dict:
     report_clips = []
 
     for index, clip in enumerate(clips, start=1):
-        print(f"[{index}/{len(clips)}] Probing {clip.name}")
+        relative_path = clip.relative_to(
+            project_root
+        ).as_posix()
+
+        stat = clip.stat()
+
+        existing_clip = existing_clips.get(
+            relative_path
+        )
+
+        if (
+            not force
+            and existing_clip
+            and existing_clip.get("size_bytes")
+            == stat.st_size
+            and existing_clip.get("modified_time_ns")
+            == stat.st_mtime_ns
+        ):
+            print(
+                f"[{index}/{len(clips)}] "
+                f"Unchanged {clip.name}"
+            )
+
+            thumbnail_filename = thumbnail_name(
+                clip,
+                project_root,
+            )
+
+            thumbnail_file = (
+                project_root
+                / "metadata"
+                / "thumbnails"
+                / thumbnail_filename
+            )
+
+            cached_clip = existing_clip.copy()
+
+            cached_clip["thumbnail"] = (
+                f"metadata/thumbnails/{thumbnail_filename}"
+                if thumbnail_file.exists()
+                else None
+            )
+
+            report_clips.append(cached_clip)
+
+            continue
+
+        print(
+            f"[{index}/{len(clips)}] "
+            f"Probing {clip.name}"
+        )
 
         try:
             info = probe_video(clip)
@@ -387,16 +477,14 @@ def analyze_project(project_root: Path) -> dict:
             "name": clip.name,
 
 
-            "relative_path": clip.relative_to(
-                project_root
-            ).as_posix(),
+            "relative_path": relative_path,
             "thumbnail": (
                 f"metadata/thumbnails/{thumbnail_filename}"
                 if thumbnail_file.exists()
                 else None
             ),
             "size_bytes": file_size,
-
+            "modified_time_ns": clip.stat().st_mtime_ns,
             "creation_time": creation_time,
 
             "creation_time_local": (

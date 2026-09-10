@@ -30,10 +30,15 @@ def main():
         help="Show the current video project.",
     )
 
-    # probe
-    subparsers.add_parser(
+    probe_parser = subparsers.add_parser(
         "probe",
         help="Analyze video clips in the current project.",
+    )
+
+    probe_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Probe all clips again, ignoring cached metadata.",
     )
 
     subparsers.add_parser(
@@ -103,7 +108,10 @@ def main():
         print(f"Project: {project_root}")
 
     elif args.command == "probe":
-        analyze_project(project_root)
+        analyze_project(
+            project_root,
+            force=args.force,
+        )
 
     elif args.command == "thumbnails":
         generate_project_thumbnails(
