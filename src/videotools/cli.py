@@ -1,8 +1,17 @@
 import argparse
+from pathlib import Path
+import sys
 
+from videotools.edit import EditValidationError, load_edit_timeline
 from videotools.init_project import create_project
 from videotools.metadata import analyze_project
-from videotools.project import find_project_root
+from videotools.project import VideoProject, find_project_root
+from videotools.render import RenderError, render_accurate, render_fast
+from videotools.sample_edit import (
+    SampleEditError,
+    create_sample_edit,
+    create_selected_edit,
+)
 from videotools.journal import (
     add_journal_entry,
     list_journal_entries,
@@ -22,6 +31,11 @@ def main():
     subparsers = parser.add_subparsers(
         dest="command",
         required=True,
+    )
+
+    subparsers.add_parser(
+        "help",
+        help="List all available commands.",
     )
 
     # project
@@ -57,6 +71,52 @@ def main():
         help="Regenerate thumbnails that already exist.",
     )
 
+    render_parser = subparsers.add_parser(
+        "render",
+        help="Render a JSON edit timeline.",
+    )
+
+    render_parser.add_argument(
+        "edit_file",
+        type=Path,
+        help="Path to the JSON edit file.",
+    )
+
+    render_parser.add_argument(
+        "--mode",
+        choices=("accurate", "fast"),
+        default="accurate",
+        help="Rendering strategy (default: accurate).",
+    )
+
+    render_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace the output file if it already exists.",
+    )
+
+    sample_edit_parser = subparsers.add_parser(
+        "sample-edit",
+        help="Create test-edit.json from existing project clips.",
+    )
+
+    sample_edit_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace test-edit.json if it already exists.",
+    )
+
+    select_edit_parser = subparsers.add_parser(
+        "select-edit",
+        help="Interactively select clips for selected-edit.json.",
+    )
+
+    select_edit_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace selected-edit.json if it already exists.",
+    )
+
     journal_parser = subparsers.add_parser(
         "journal",
         help="Work with the current project's journal.",
@@ -90,6 +150,14 @@ def main():
 
     args = parser.parse_args()
 
+    if args.command == "help":
+        parser.print_help()
+        print()
+        print("Journal commands:")
+        print("  video-tools journal add   Add a journal entry.")
+        print("  video-tools journal list  List journal entries.")
+        return
+
     # init does not need an existing project
     if args.command == "init":
         project_dir = create_project(args.name)
@@ -121,6 +189,65 @@ def main():
 
     elif args.command == "organize":
         organize_clips(project_root)
+
+    elif args.command == "render":
+        try:
+            project = VideoProject.load(project_root)
+            timeline = load_edit_timeline(
+                args.edit_file,
+                project,
+            )
+            print(f"Rendering ({args.mode})...")
+
+            renderer = (
+                render_fast
+                if args.mode == "fast"
+                else render_accurate
+            )
+
+            output = renderer(
+                timeline,
+                overwrite=args.overwrite,
+            )
+        except (EditValidationError, RenderError, OSError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            raise SystemExit(1) from error
+
+        print(f"Rendered: {output}")
+
+    elif args.command == "sample-edit":
+        try:
+            project = VideoProject.load(project_root)
+            result = create_sample_edit(
+                project,
+                overwrite=args.overwrite,
+            )
+        except (SampleEditError, OSError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            raise SystemExit(1) from error
+
+        print(f"Created: {result.edit_file}")
+        print(f"Selected clips: {result.clip_count}")
+        if result.skipped_count:
+            print(f"Skipped clips: {result.skipped_count}")
+        print("Render it with: video-tools render test-edit.json")
+
+    elif args.command == "select-edit":
+        try:
+            project = VideoProject.load(project_root)
+            result = create_selected_edit(
+                project,
+                overwrite=args.overwrite,
+            )
+        except (SampleEditError, OSError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            raise SystemExit(1) from error
+
+        print(f"Created: {result.edit_file}")
+        print(f"Selected clips: {result.clip_count}")
+        if result.skipped_count:
+            print(f"Unavailable clips: {result.skipped_count}")
+        print("Render it with: video-tools render selected-edit.json")
 
     elif args.command == "journal":
         if args.journal_command == "add":

@@ -2,11 +2,11 @@ from collections import Counter
 from pathlib import Path
 
 from videotools.journal import load_journal
+from videotools.project import load_project_config
 from videotools.report import generate_html_report
 from videotools.thumbnails import thumbnail_name
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import tomllib
 
 from videotools.media import VIDEO_EXTENSIONS
 import shutil
@@ -251,12 +251,6 @@ def get_creation_time(info: dict):
             return tags["creation_time"]
 
     return None
-
-def load_project_config(project_root: Path) -> dict:
-    config_file = project_root / "project.toml"
-
-    with config_file.open("rb") as file:
-        return tomllib.load(file)
 
 def load_existing_report(
     report_file: Path,

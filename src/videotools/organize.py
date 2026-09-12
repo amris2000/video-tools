@@ -4,10 +4,10 @@ import shutil
 from videotools.metadata import (
     VIDEO_EXTENSIONS,
     get_creation_time,
-    load_project_config,
     parse_creation_time,
     probe_video,
 )
+from videotools.project import load_project_config
 
 
 def organize_clips(project_root: Path):
