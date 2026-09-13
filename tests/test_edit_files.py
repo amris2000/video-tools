@@ -11,6 +11,7 @@ from videotools.edit_files import (
     create_new_edit_file,
     create_render_output_path,
     list_render_files,
+    list_social_render_files,
     list_edit_files,
     output_name_for_edit_filename,
     save_edit_document,
@@ -147,6 +148,21 @@ exports = "exports"
         (nested_dir / "nested.mp4").write_text("ignore", encoding="utf-8")
 
         self.assertEqual(list_render_files(self.project), [newest, oldest])
+
+    def test_list_social_render_files_filters_mp4_and_sorts_newest_first(self):
+        self.project.exports_social_dir.mkdir(parents=True, exist_ok=True)
+        newest = self.project.exports_social_dir / "20260913_105103_accurate_instagram.mp4"
+        oldest = self.project.exports_social_dir / "20260913_093000_fast_instagram.mp4"
+        ignored = self.project.exports_social_dir / "notes.txt"
+        nested_dir = self.project.exports_social_dir / "nested"
+
+        newest.write_text("new", encoding="utf-8")
+        oldest.write_text("old", encoding="utf-8")
+        ignored.write_text("ignore", encoding="utf-8")
+        nested_dir.mkdir()
+        (nested_dir / "nested.mp4").write_text("ignore", encoding="utf-8")
+
+        self.assertEqual(list_social_render_files(self.project), [newest, oldest])
 
 
 if __name__ == "__main__":

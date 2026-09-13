@@ -3,6 +3,7 @@ const state = {
   edits: [],
   clips: [],
   renders: [],
+  renderScope: "exports",
   currentView: "edit",
   currentRenderFilename: "",
   clipMap: new Map(),
@@ -67,6 +68,8 @@ const elements = {
   clipList: document.getElementById("clipList"),
   clipCancelButton: document.getElementById("clipCancelButton"),
   refreshRendersButton: document.getElementById("refreshRendersButton"),
+  exportsScopeButton: document.getElementById("exportsScopeButton"),
+  socialScopeButton: document.getElementById("socialScopeButton"),
   rendersEmpty: document.getElementById("rendersEmpty"),
   rendersList: document.getElementById("rendersList"),
   renderPlayerWrap: document.getElementById("renderPlayerWrap"),
@@ -147,7 +150,8 @@ function mediaUrl(relativePath) {
 }
 
 function renderUrl(filename) {
-  return `/renders/${encodeURIComponent(filename)}`;
+  const base = state.renderScope === "social" ? "/social-renders" : "/renders";
+  return `${base}/${encodeURIComponent(filename)}`;
 }
 
 function showToast(message) {
@@ -311,6 +315,15 @@ function renderView() {
 function renderRendersList() {
   elements.rendersList.innerHTML = "";
   const hasRenders = state.renders.length > 0;
+
+  elements.exportsScopeButton.classList.toggle("active-scope", state.renderScope === "exports");
+  elements.socialScopeButton.classList.toggle("active-scope", state.renderScope === "social");
+
+  const emptyHint = state.renderScope === "social"
+    ? "No social-media exports yet.\n\nCreate one from the terminal with:\n\nvideo-tools social"
+    : "No rendered videos yet.\n\nRender an edit from the terminal with:\n\nvideo-tools render";
+  elements.rendersEmpty.textContent = emptyHint;
+
   elements.rendersEmpty.classList.toggle("hidden", hasRenders);
 
   if (!hasRenders) {
@@ -363,9 +376,19 @@ function renderRendersList() {
 }
 
 async function refreshRenders() {
-  const data = await api("/api/renders");
+  const endpoint = state.renderScope === "social" ? "/api/renders-social" : "/api/renders";
+  const data = await api(endpoint);
   state.renders = data.renders;
   renderRendersList();
+}
+
+async function switchRenderScope(scope) {
+  if (state.renderScope === scope) {
+    return;
+  }
+  state.renderScope = scope;
+  state.currentRenderFilename = "";
+  await refreshRenders();
 }
 
 async function switchView(view) {
@@ -653,6 +676,12 @@ elements.viewRendersButton.addEventListener("click", () => {
 });
 elements.refreshRendersButton.addEventListener("click", () => {
   refreshRenders().catch(reportError);
+});
+elements.exportsScopeButton.addEventListener("click", () => {
+  switchRenderScope("exports").catch(reportError);
+});
+elements.socialScopeButton.addEventListener("click", () => {
+  switchRenderScope("social").catch(reportError);
 });
 
 elements.renameButton.addEventListener("click", () => {

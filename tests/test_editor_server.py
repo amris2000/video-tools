@@ -40,6 +40,12 @@ exports = "exports"
         (self.root / "exports" / "ignore.txt").write_text("skip", encoding="utf-8")
         (self.root / "exports" / "nested").mkdir()
         (self.root / "exports" / "nested" / "nested.mp4").write_bytes(b"nested")
+        (self.root / "exports-social").mkdir()
+        (self.root / "exports-social" / "20260913_120000_video_instagram.mp4").write_bytes(b"social-one-data")
+        (self.root / "exports-social" / "20260913_110000_video_instagram.mp4").write_bytes(b"social-two-data")
+        (self.root / "exports-social" / "ignore.txt").write_text("skip", encoding="utf-8")
+        (self.root / "exports-social" / "nested").mkdir()
+        (self.root / "exports-social" / "nested" / "nested.mp4").write_bytes(b"nested")
 
         (self.root / "metadata" / "clip_report.json").write_text(
             json.dumps(
@@ -300,6 +306,36 @@ exports = "exports"
         self.assertIn(".mp4 extension", parsed["error"])
 
         status, _, _, parsed = self.request("GET", "/renders/missing_video.mp4")
+        self.assertEqual(status, 404)
+        self.assertIn("not found", parsed["error"].lower())
+
+    def test_lists_and_streams_social_renders(self):
+        status, _, _, parsed = self.request("GET", "/api/renders-social")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            [item["filename"] for item in parsed["renders"]],
+            ["20260913_120000_video_instagram.mp4", "20260913_110000_video_instagram.mp4"],
+        )
+
+        status, response, data, _ = self.request(
+            "GET",
+            "/social-renders/20260913_120000_video_instagram.mp4",
+            headers={"Range": "bytes=0-5"},
+        )
+        self.assertEqual(status, 206)
+        self.assertEqual(data, b"social")
+        self.assertEqual(response.getheader("Content-Range"), "bytes 0-5/15")
+        self.assertEqual(response.getheader("Accept-Ranges"), "bytes")
+
+        status, _, _, parsed = self.request("GET", "/social-renders/..%2Fsecret.mp4")
+        self.assertEqual(status, 400)
+        self.assertIn("exports-social", parsed["error"])
+
+        status, _, _, parsed = self.request("GET", "/social-renders/ignore.txt")
+        self.assertEqual(status, 400)
+        self.assertIn(".mp4 extension", parsed["error"])
+
+        status, _, _, parsed = self.request("GET", "/social-renders/missing_video.mp4")
         self.assertEqual(status, 404)
         self.assertIn("not found", parsed["error"].lower())
 

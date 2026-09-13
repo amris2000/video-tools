@@ -19,6 +19,7 @@ from videotools.edit_files import (
     create_empty_edit_document,
     delete_edit_file,
     list_render_files,
+    list_social_render_files,
     load_edit_document,
     list_edit_files,
     output_name_for_edit_filename,
@@ -124,6 +125,16 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
                         ]
                     },
                 )
+            elif path == "/api/renders-social":
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "renders": [
+                            {"filename": render_file.name}
+                            for render_file in list_social_render_files(self.server.project)
+                        ]
+                    },
+                )
             elif path.startswith("/api/edits/"):
                 filename = self._edit_filename_from_path(path)
                 document = load_edit_document(self.server.project, filename)
@@ -137,6 +148,8 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
                 self._serve_media(path.removeprefix("/media/"))
             elif path.startswith("/renders/"):
                 self._serve_render(path.removeprefix("/renders/"))
+            elif path.startswith("/social-renders/"):
+                self._serve_social_render(path.removeprefix("/social-renders/"))
             else:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "Not found.")
         except CLIENT_DISCONNECT_ERRORS:
@@ -275,7 +288,19 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
         _serve_file_with_ranges(self, media_file)
 
     def _serve_render(self, encoded_filename: str) -> None:
-        render_file = _resolve_render_path(self.server.project, unquote(encoded_filename))
+        render_file = _resolve_render_path(
+            self.server.project,
+            unquote(encoded_filename),
+            social=False,
+        )
+        _serve_file_with_ranges(self, render_file)
+
+    def _serve_social_render(self, encoded_filename: str) -> None:
+        render_file = _resolve_render_path(
+            self.server.project,
+            unquote(encoded_filename),
+            social=True,
+        )
         _serve_file_with_ranges(self, render_file)
 
     def _read_json_body(self) -> dict[str, Any]:
@@ -354,22 +379,24 @@ def _serve_file_with_ranges(handler: EditorRequestHandler, file_path: Path) -> N
     _stream_file(handler.wfile, file_path, start=0, length=file_size)
 
 
-def _resolve_render_path(project: VideoProject, filename: str) -> Path:
+def _resolve_render_path(project: VideoProject, filename: str, *, social: bool) -> Path:
     value = filename.strip()
     candidate = Path(value)
+    target_root = project.exports_social_dir if social else project.exports_dir
+    root_name = "exports-social" if social else "exports"
 
     if not value:
         raise ValueError("Render filename is required.")
     if candidate.is_absolute() or ".." in candidate.parts:
-        raise ValueError("Render filename must stay inside the project's exports directory.")
+        raise ValueError(f"Render filename must stay inside the project's {root_name} directory.")
     if "/" in value or "\\" in value or len(candidate.parts) != 1:
         raise ValueError("Render filename must not include directory separators.")
     if candidate.suffix.lower() != ".mp4":
         raise ValueError("Render filename must use the .mp4 extension.")
 
-    target = (project.exports_dir / candidate.name).resolve()
-    if not target.is_relative_to(project.exports_dir):
-        raise ValueError("Render filename must stay inside the project's exports directory.")
+    target = (target_root / candidate.name).resolve()
+    if not target.is_relative_to(target_root):
+        raise ValueError(f"Render filename must stay inside the project's {root_name} directory.")
     if not target.is_file():
         raise FileNotFoundError("Render file was not found.")
 

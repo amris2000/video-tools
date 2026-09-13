@@ -257,6 +257,12 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(180, 85, 45, 0.12);
 }
 
+#exportsScopeButton.active-scope,
+#socialScopeButton.active-scope {
+  background: var(--accent);
+  color: #fff7f2;
+}
+
 .render-player-slot {
   margin-top: 2px;
 }

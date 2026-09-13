@@ -69,6 +69,19 @@ def list_render_files(project: VideoProject) -> list[Path]:
     )
 
 
+def list_social_render_files(project: VideoProject) -> list[Path]:
+    social_dir = project.exports_social_dir
+    social_dir.mkdir(parents=True, exist_ok=True)
+    return sorted(
+        (
+            path
+            for path in social_dir.iterdir()
+            if path.is_file() and path.suffix.lower() == ".mp4"
+        ),
+        reverse=True,
+    )
+
+
 def output_name_for_edit_filename(filename: str) -> str:
     validated = validate_edit_filename(filename)
     stem = Path(validated).stem
