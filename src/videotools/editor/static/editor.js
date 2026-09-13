@@ -211,25 +211,36 @@ function renderTimeline() {
 
     const info = state.clipMap.get(clip.file);
     const duration = clip.end - clip.start;
+    const thumbnailHtml = info?.thumbnail_url
+      ? `<img class="clip-thumb" src="${info.thumbnail_url}" alt="Thumbnail for ${clip.file}" loading="lazy" />`
+      : `<div class="clip-thumb clip-thumb-placeholder" aria-hidden="true"></div>`;
 
     wrapper.innerHTML = `
-      <div class="timeline-top">
-        <div>
+      <div class="timeline-grid">
+        <div class="timeline-col timeline-col-main">
           <div class="clip-index">${index + 1}</div>
           <div class="clip-file">${clip.file}</div>
+          <div class="clip-range">${formatSeconds(clip.start)} -> ${formatSeconds(clip.end)}</div>
+          <div class="timeline-actions">
+            <button type="button" data-action="up" ${index === 0 ? "disabled" : ""}>Move Up</button>
+            <button type="button" data-action="down" ${index === state.document.clips.length - 1 ? "disabled" : ""}>Move Down</button>
+            <button type="button" data-action="remove" class="danger">Remove</button>
+          </div>
         </div>
-        <button type="button" data-action="select">Inspect</button>
-      </div>
-      <div class="timeline-meta">
-        <span>${formatSeconds(clip.start)} → ${formatSeconds(clip.end)}</span>
-        <span>Duration ${formatSeconds(duration)}</span>
-        <span>${clip.label || "No label"}</span>
-        <span>${info?.duration ? `Source ${formatSeconds(info.duration)}` : "Source duration unavailable"}</span>
-      </div>
-      <div class="timeline-actions">
-        <button type="button" data-action="up" ${index === 0 ? "disabled" : ""}>Move Up</button>
-        <button type="button" data-action="down" ${index === state.document.clips.length - 1 ? "disabled" : ""}>Move Down</button>
-        <button type="button" data-action="remove" class="danger">Remove</button>
+
+        <div class="timeline-col timeline-col-thumb">
+          ${thumbnailHtml}
+        </div>
+
+        <div class="timeline-col timeline-col-details">
+          <div class="timeline-detail">Duration ${formatSeconds(duration)}</div>
+          <div class="timeline-detail clip-label-detail">${clip.label || "No label"}</div>
+          <div class="timeline-detail">${info?.duration ? `Source ${formatSeconds(info.duration)}` : "Source duration unavailable"}</div>
+        </div>
+
+        <div class="timeline-col timeline-col-inspect">
+          <button type="button" data-action="select">Inspect</button>
+        </div>
       </div>
     `;
 

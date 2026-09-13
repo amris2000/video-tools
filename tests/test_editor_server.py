@@ -17,6 +17,7 @@ class EditorServerTests(unittest.TestCase):
         (self.root / "clips" / "day-one").mkdir(parents=True)
         (self.root / "exports").mkdir()
         (self.root / "metadata").mkdir()
+        (self.root / "metadata" / "thumbnails").mkdir(parents=True)
         (self.root / "edits").mkdir()
         (self.root / "project.toml").write_text(
             """\
@@ -35,6 +36,8 @@ exports = "exports"
         self.clip_two = self.root / "clips" / "day-one" / "GX010020.MP4"
         self.clip_one.write_bytes(b"abcdefghijklmnopqrstuvwxyz")
         self.clip_two.write_bytes(b"0123456789abcdefghijklmnopqrstuvwxyz")
+        (self.root / "metadata" / "thumbnails" / "GX010017-thumb.webp").write_bytes(b"thumb-one")
+        (self.root / "metadata" / "thumbnails" / "GX010020-thumb.webp").write_bytes(b"thumb-two")
         (self.root / "exports" / "20260913_111500_video.mp4").write_bytes(b"render-one-data")
         (self.root / "exports" / "20260913_101500_video.mp4").write_bytes(b"render-two-data")
         (self.root / "exports" / "ignore.txt").write_text("skip", encoding="utf-8")
@@ -56,11 +59,13 @@ exports = "exports"
                             "name": self.clip_one.name,
                             "relative_path": "clips/day-one/GX010017.MP4",
                             "duration": 12.5,
+                            "thumbnail": "metadata/thumbnails/GX010017-thumb.webp",
                         },
                         {
                             "name": self.clip_two.name,
                             "relative_path": "clips/day-one/GX010020.MP4",
                             "duration": 6.0,
+                            "thumbnail": "metadata/thumbnails/GX010020-thumb.webp",
                         },
                     ],
                 }
@@ -264,6 +269,10 @@ exports = "exports"
         self.assertEqual(status, 200)
         self.assertEqual(parsed["clips"][0]["file"], "day-one/GX010017.MP4")
         self.assertEqual(parsed["clips"][0]["duration"], 12.5)
+        self.assertEqual(
+            parsed["clips"][0]["thumbnail_url"],
+            "/thumbnails/thumbnails/GX010017-thumb.webp",
+        )
 
         status, response, data, _ = self.request(
             "GET",
@@ -278,6 +287,14 @@ exports = "exports"
         status, _, _, parsed = self.request("GET", "/media/..%2Fsecret.mp4")
         self.assertEqual(status, 400)
         self.assertIn("clips directory", parsed["error"])
+
+        status, _, data, _ = self.request("GET", "/thumbnails/thumbnails/GX010017-thumb.webp")
+        self.assertEqual(status, 200)
+        self.assertEqual(data, b"thumb-one")
+
+        status, _, _, parsed = self.request("GET", "/thumbnails/..%2Fsecret.webp")
+        self.assertEqual(status, 400)
+        self.assertIn("metadata directory", parsed["error"])
 
     def test_lists_and_streams_renders(self):
         status, _, _, parsed = self.request("GET", "/api/renders")

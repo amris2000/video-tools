@@ -10,7 +10,7 @@ from pathlib import Path
 import shutil
 from subprocess import CalledProcessError
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 import webbrowser
 
 from videotools.edit import EditValidationError
@@ -50,6 +50,7 @@ class ClipCatalogEntry:
     file: str
     name: str
     duration: float | None
+    thumbnail_url: str | None
 
 
 class EditorHTTPServer(ThreadingHTTPServer):
@@ -146,6 +147,8 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.OK, document)
             elif path.startswith("/media/"):
                 self._serve_media(path.removeprefix("/media/"))
+            elif path.startswith("/thumbnails/"):
+                self._serve_thumbnail(path.removeprefix("/thumbnails/"))
             elif path.startswith("/renders/"):
                 self._serve_render(path.removeprefix("/renders/"))
             elif path.startswith("/social-renders/"):
@@ -302,6 +305,17 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
             social=True,
         )
         _serve_file_with_ranges(self, render_file)
+
+    def _serve_thumbnail(self, encoded_relative_path: str) -> None:
+        thumbnail_file = _resolve_thumbnail_path(self.server.project, unquote(encoded_relative_path))
+        content_type, _ = mimetypes.guess_type(str(thumbnail_file))
+        data = thumbnail_file.read_bytes()
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type or "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _read_json_body(self) -> dict[str, Any]:
         try:
@@ -542,6 +556,7 @@ def _load_clip_catalog(project: VideoProject) -> list[ClipCatalogEntry]:
                 file=path.relative_to(project.clips_dir).as_posix(),
                 name=path.name,
                 duration=duration,
+                thumbnail_url=None,
             )
         )
 
@@ -558,6 +573,7 @@ def _load_clip_catalog(project: VideoProject) -> list[ClipCatalogEntry]:
 def _clip_from_report(project: VideoProject, clip: dict[str, Any]) -> ClipCatalogEntry | None:
     relative_path = clip.get("relative_path")
     duration = clip.get("duration")
+    thumbnail_url = _thumbnail_url_from_report_value(project, clip.get("thumbnail"))
 
     if not isinstance(relative_path, str):
         return None
@@ -573,7 +589,48 @@ def _clip_from_report(project: VideoProject, clip: dict[str, Any]) -> ClipCatalo
         file=absolute.relative_to(project.clips_dir).as_posix(),
         name=absolute.name,
         duration=round(float(duration), 3) if duration is not None else None,
+        thumbnail_url=thumbnail_url,
     )
+
+
+def _thumbnail_url_from_report_value(project: VideoProject, value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    text = value.strip()
+    if text.startswith("metadata/"):
+        text = text.removeprefix("metadata/")
+
+    try:
+        relative = _normalize_thumbnail_relative_path(text)
+    except ValueError:
+        return None
+
+    target = (project.metadata_dir / relative).resolve()
+    if not target.is_relative_to(project.metadata_dir) or not target.is_file():
+        return None
+
+    encoded = "/".join(quote(part) for part in relative.parts)
+    return f"/thumbnails/{encoded}"
+
+
+def _resolve_thumbnail_path(project: VideoProject, relative_path: str) -> Path:
+    relative = _normalize_thumbnail_relative_path(relative_path)
+    target = (project.metadata_dir / relative).resolve()
+    if not target.is_relative_to(project.metadata_dir):
+        raise ValueError("Thumbnail path must stay inside the project's metadata directory.")
+    if not target.is_file():
+        raise FileNotFoundError(f"Thumbnail file does not exist: {target}")
+    return target
+
+
+def _normalize_thumbnail_relative_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError("Thumbnail path must stay inside the project's metadata directory.")
+    if path.suffix.lower() not in {".webp", ".jpg", ".jpeg", ".png"}:
+        raise ValueError("Thumbnail path is not a supported image type.")
+    return path
 
 
 def _probe_duration(path: Path) -> float | None:
