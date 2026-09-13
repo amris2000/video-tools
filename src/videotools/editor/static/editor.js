@@ -7,6 +7,8 @@ const state = {
   currentView: "edit",
   currentRenderFilename: "",
   currentClipInspectFile: "",
+  newEditSelectedFiles: new Set(),
+  newEditOutputTouched: false,
   clipMap: new Map(),
   currentFilename: "",
   document: { version: 1, output: "", clips: [] },
@@ -24,6 +26,7 @@ const elements = {
   viewEditButton: document.getElementById("viewEditButton"),
   viewRendersButton: document.getElementById("viewRendersButton"),
   viewClipsButton: document.getElementById("viewClipsButton"),
+  newEditView: document.getElementById("newEditView"),
   editView: document.getElementById("editView"),
   rendersView: document.getElementById("rendersView"),
   clipsView: document.getElementById("clipsView"),
@@ -83,6 +86,15 @@ const elements = {
   clipBrowserPlayerWrap: document.getElementById("clipBrowserPlayerWrap"),
   clipBrowserVideo: document.getElementById("clipBrowserVideo"),
   clipBrowserMeta: document.getElementById("clipBrowserMeta"),
+  newEditFilenameInput: document.getElementById("newEditFilenameInput"),
+  newEditOutputInput: document.getElementById("newEditOutputInput"),
+  newEditSelectionCount: document.getElementById("newEditSelectionCount"),
+  newEditBuilderEmpty: document.getElementById("newEditBuilderEmpty"),
+  newEditClipGrid: document.getElementById("newEditClipGrid"),
+  newEditSelectAllButton: document.getElementById("newEditSelectAllButton"),
+  newEditSelectNoneButton: document.getElementById("newEditSelectNoneButton"),
+  newEditCreateButton: document.getElementById("newEditCreateButton"),
+  newEditCancelButton: document.getElementById("newEditCancelButton"),
   toast: document.getElementById("toast"),
 };
 
@@ -311,6 +323,7 @@ function renderInspector() {
 
 function renderAll() {
   renderView();
+  renderNewEditBuilder();
   renderEditSelector();
   renderTimeline();
   renderInspector();
@@ -327,7 +340,9 @@ function renderView() {
   const editActive = state.currentView === "edit";
   const rendersActive = state.currentView === "renders";
   const clipsActive = state.currentView === "clips";
+  const newEditActive = state.currentView === "new-edit";
 
+  elements.newEditView.classList.toggle("hidden", !newEditActive);
   elements.editView.classList.toggle("hidden", !editActive);
   elements.rendersView.classList.toggle("hidden", !rendersActive);
   elements.clipsView.classList.toggle("hidden", !clipsActive);
@@ -339,6 +354,151 @@ function renderView() {
   elements.viewEditButton.setAttribute("aria-selected", editActive ? "true" : "false");
   elements.viewRendersButton.setAttribute("aria-selected", rendersActive ? "true" : "false");
   elements.viewClipsButton.setAttribute("aria-selected", clipsActive ? "true" : "false");
+}
+
+function buildDefaultWindow(duration) {
+  const clipDuration = Number(duration);
+  if (!Number.isFinite(clipDuration) || clipDuration <= 0) {
+    return { start: 0, end: 2 };
+  }
+
+  const windowLength = Math.min(2, clipDuration);
+  const start = clipDuration > windowLength ? (clipDuration - windowLength) / 2 : 0;
+  return {
+    start: Number(start.toFixed(3)),
+    end: Number((start + windowLength).toFixed(3)),
+  };
+}
+
+function renderNewEditBuilder() {
+  const clips = state.clips;
+  const selectedCount = clips.filter((clip) => state.newEditSelectedFiles.has(clip.file)).length;
+  const hasClips = clips.length > 0;
+
+  elements.newEditBuilderEmpty.classList.toggle("hidden", hasClips);
+  elements.newEditClipGrid.innerHTML = "";
+  elements.newEditSelectionCount.textContent = `${selectedCount} of ${clips.length} clips selected`;
+
+  elements.newEditCreateButton.disabled = !hasClips || selectedCount === 0;
+  elements.newEditSelectAllButton.disabled = !hasClips;
+  elements.newEditSelectNoneButton.disabled = !hasClips;
+
+  if (!hasClips) {
+    return;
+  }
+
+  for (const clip of clips) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "new-edit-clip-card";
+
+    const isSelected = state.newEditSelectedFiles.has(clip.file);
+    if (isSelected) {
+      card.classList.add("selected");
+    }
+
+    const thumbWrap = document.createElement("div");
+    thumbWrap.className = "new-edit-thumb-wrap";
+
+    if (clip.thumbnail_url) {
+      const thumb = document.createElement("img");
+      thumb.className = "clip-thumb";
+      thumb.loading = "lazy";
+      thumb.alt = `Thumbnail for ${clip.file}`;
+      thumb.src = clip.thumbnail_url;
+      thumbWrap.append(thumb);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "clip-thumb clip-thumb-placeholder";
+      placeholder.setAttribute("aria-hidden", "true");
+      thumbWrap.append(placeholder);
+    }
+
+    const details = document.createElement("span");
+    details.className = "new-edit-clip-card-details";
+
+    const name = document.createElement("strong");
+    name.textContent = clip.name;
+    const relative = document.createElement("span");
+    relative.className = "muted";
+    relative.textContent = clip.file;
+
+    details.append(name, relative);
+    card.append(thumbWrap, details);
+
+    card.addEventListener("click", () => {
+      if (state.newEditSelectedFiles.has(clip.file)) {
+        state.newEditSelectedFiles.delete(clip.file);
+      } else {
+        state.newEditSelectedFiles.add(clip.file);
+      }
+      renderNewEditBuilder();
+    });
+
+    elements.newEditClipGrid.append(card);
+  }
+}
+
+async function openNewEditBuilder() {
+  if (state.dirty) {
+    const confirmed = window.confirm("Discard unsaved changes and create a new edit?");
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  const defaults = await api("/api/edits/defaults");
+  state.newEditOutputTouched = false;
+  state.newEditSelectedFiles = new Set(state.clips.map((clip) => clip.file));
+  elements.newEditFilenameInput.value = defaults.filename;
+  elements.newEditOutputInput.value = defaults.output;
+
+  state.currentView = "new-edit";
+  renderView();
+  renderNewEditBuilder();
+}
+
+async function createNewEditFromSelection() {
+  const filename = elements.newEditFilenameInput.value.trim();
+  const output = elements.newEditOutputInput.value.trim() || deriveSuggestedOutput(filename);
+
+  const selectedClips = state.clips.filter((clip) => state.newEditSelectedFiles.has(clip.file));
+  if (!selectedClips.length) {
+    showToast("Select at least one clip.");
+    return;
+  }
+
+  const documentValue = {
+    version: 1,
+    output,
+    clips: selectedClips.map((clip) => {
+      const windowValue = buildDefaultWindow(clip.duration);
+      return {
+        file: clip.file,
+        start: windowValue.start,
+        end: windowValue.end,
+        label: `Sample from ${clip.name}`,
+      };
+    }),
+  };
+
+  await api("/api/edits", {
+    method: "POST",
+    body: JSON.stringify({ filename, output }),
+  });
+
+  const saved = await api(`/api/edits/${encodeURIComponent(filename)}`, {
+    method: "PUT",
+    body: JSON.stringify({ document: documentValue }),
+  });
+
+  await refreshEdits();
+  state.currentFilename = saved.filename;
+  state.selectedIndex = documentValue.clips.length ? 0 : -1;
+  markSaved(saved.document);
+  state.currentView = "edit";
+  renderView();
+  showToast(`Created ${saved.filename}`);
 }
 
 function clipDateGroup(clipFile) {
@@ -430,6 +590,13 @@ function renderClipsBrowser() {
       });
 
       rows.append(button);
+
+      if (clip.file === state.currentClipInspectFile) {
+        const playerSlot = document.createElement("div");
+        playerSlot.className = "clip-browser-player-slot";
+        playerSlot.append(elements.clipBrowserPlayerWrap);
+        rows.append(playerSlot);
+      }
     }
 
     section.append(rows);
@@ -607,14 +774,39 @@ function renderClipPicker() {
   for (const clip of matches) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "clip-option";
-    button.innerHTML = `
-      <span>
-        <strong>${clip.file}</strong>
-        <span class="muted">${clip.name}</span>
-      </span>
-      <span>${clip.duration ? formatSeconds(clip.duration) : "Unknown"}</span>
-    `;
+    button.className = "clip-option-card";
+
+    const thumbWrap = document.createElement("div");
+    thumbWrap.className = "new-edit-thumb-wrap";
+
+    if (clip.thumbnail_url) {
+      const thumb = document.createElement("img");
+      thumb.className = "clip-thumb";
+      thumb.loading = "lazy";
+      thumb.alt = `Thumbnail for ${clip.file}`;
+      thumb.src = clip.thumbnail_url;
+      thumbWrap.append(thumb);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "clip-thumb clip-thumb-placeholder";
+      placeholder.setAttribute("aria-hidden", "true");
+      thumbWrap.append(placeholder);
+    }
+
+    const details = document.createElement("span");
+    details.className = "clip-option-details";
+
+    const fileName = document.createElement("strong");
+    fileName.textContent = clip.file;
+    const clipName = document.createElement("span");
+    clipName.className = "muted";
+    clipName.textContent = clip.name;
+    const clipDuration = document.createElement("span");
+    clipDuration.className = "muted";
+    clipDuration.textContent = clip.duration ? formatSeconds(clip.duration) : "Unknown duration";
+
+    details.append(fileName, clipName, clipDuration);
+    button.append(thumbWrap, details);
     button.addEventListener("click", () => addClipToTimeline(clip));
     elements.clipList.append(button);
   }
@@ -817,7 +1009,7 @@ elements.editSelect.addEventListener("change", (event) => {
 });
 
 elements.saveButton.addEventListener("click", () => saveCurrentEdit().catch(reportError));
-elements.newButton.addEventListener("click", () => openDialog("new").catch(reportError));
+elements.newButton.addEventListener("click", () => openNewEditBuilder().catch(reportError));
 elements.saveAsButton.addEventListener("click", () => openDialog("save-as").catch(reportError));
 elements.addClipButton.addEventListener("click", () => elements.clipDialog.showModal());
 elements.deleteButton.addEventListener("click", () => handleDelete().catch(reportError));
@@ -829,6 +1021,20 @@ elements.viewRendersButton.addEventListener("click", () => {
 });
 elements.viewClipsButton.addEventListener("click", () => {
   switchView("clips").catch(reportError);
+});
+elements.newEditSelectAllButton.addEventListener("click", () => {
+  state.newEditSelectedFiles = new Set(state.clips.map((clip) => clip.file));
+  renderNewEditBuilder();
+});
+elements.newEditSelectNoneButton.addEventListener("click", () => {
+  state.newEditSelectedFiles = new Set();
+  renderNewEditBuilder();
+});
+elements.newEditCreateButton.addEventListener("click", () => {
+  createNewEditFromSelection().catch(reportError);
+});
+elements.newEditCancelButton.addEventListener("click", () => {
+  switchView("edit").catch(reportError);
 });
 elements.refreshRendersButton.addEventListener("click", () => {
   refreshRenders().catch(reportError);
@@ -856,6 +1062,16 @@ elements.dialogFilename.addEventListener("input", () => {
   if (!state.dialogOutputTouched) {
     elements.dialogOutput.value = deriveSuggestedOutput(elements.dialogFilename.value.trim());
   }
+});
+
+elements.newEditFilenameInput.addEventListener("input", () => {
+  if (!state.newEditOutputTouched) {
+    elements.newEditOutputInput.value = deriveSuggestedOutput(elements.newEditFilenameInput.value.trim());
+  }
+});
+
+elements.newEditOutputInput.addEventListener("input", () => {
+  state.newEditOutputTouched = true;
 });
 
 elements.dialogOutput.addEventListener("input", () => {

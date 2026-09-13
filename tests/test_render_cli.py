@@ -95,6 +95,42 @@ class RenderCliHelperTests(unittest.TestCase):
         self.assertIsNone(selected)
         self.assertIn("Render cancelled.", messages)
 
+    def test_choose_edit_file_displays_clip_counts(self):
+        with TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            first = root / "one.json"
+            second = root / "two.json"
+            first.write_text(
+                """{
+  \"version\": 1,
+  \"output\": \"one_video.mp4\",
+  \"clips\": []
+}\n""",
+                encoding="utf-8",
+            )
+            second.write_text(
+                """{
+  \"version\": 1,
+  \"output\": \"two_video.mp4\",
+  \"clips\": [
+    {\"file\": \"day-one/clip.mp4\", \"start\": 0.0, \"end\": 2.0}
+  ]
+}\n""",
+                encoding="utf-8",
+            )
+
+            messages = []
+            selected = choose_edit_file(
+                [first, second],
+                input_func=lambda prompt: "2",
+                output_func=messages.append,
+            )
+
+            self.assertEqual(selected, second)
+            joined = "\n".join(messages)
+            self.assertIn("one.json (0 clips)", joined)
+            self.assertIn("two.json (1 clip)", joined)
+
 
 class RenderWorkflowTests(unittest.TestCase):
     def setUp(self):

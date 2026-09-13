@@ -14,6 +14,7 @@
   --shadow: 0 22px 48px rgba(91, 67, 44, 0.14);
   --radius: 18px;
   --font: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --viewer-max-height: 560px;
 }
 
 * {
@@ -389,6 +390,50 @@ button:disabled {
   margin-top: 2px;
 }
 
+.new-edit-panel .field-grid {
+  margin-bottom: 12px;
+}
+
+.new-edit-clip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.new-edit-clip-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  padding: 10px;
+  border: 1px solid rgba(74, 49, 22, 0.14);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.new-edit-clip-card.selected {
+  border-color: rgba(180, 85, 45, 0.62);
+  box-shadow: 0 0 0 3px rgba(180, 85, 45, 0.12);
+}
+
+.new-edit-thumb-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.new-edit-clip-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.new-edit-clip-card-details strong,
+.new-edit-clip-card-details .muted {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .clips-groups {
   display: flex;
   flex-direction: column;
@@ -456,6 +501,10 @@ button:disabled {
   margin-top: 10px;
 }
 
+.clip-browser-player-slot {
+  margin-top: 2px;
+}
+
 .empty-state {
   padding: 18px;
   border-radius: 14px;
@@ -477,7 +526,7 @@ video {
   width: 100%;
   display: block;
   background: #000;
-  max-height: 380px;
+  max-height: var(--viewer-max-height);
 }
 
 .metrics {
@@ -536,7 +585,7 @@ dialog::backdrop {
 }
 
 .dialog-form.wide {
-  width: min(780px, calc(100vw - 32px));
+  width: 100%;
 }
 
 .dialog-actions {
@@ -545,27 +594,57 @@ dialog::backdrop {
   gap: 10px;
 }
 
+#clipDialog {
+  width: calc(100vw - 64px);
+  height: calc(100vh - 64px);
+  max-width: none;
+  max-height: none;
+}
+
+#clipDialog .dialog-form {
+  width: 100%;
+  height: 100%;
+}
+
+#clipDialog .clip-picker {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
 .clip-picker {
   max-height: 420px;
   overflow: auto;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
 }
 
-.clip-option {
+.clip-option-card {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(74, 49, 22, 0.1);
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  padding: 10px;
+  border: 1px solid rgba(74, 49, 22, 0.14);
+  background: rgba(255, 255, 255, 0.76);
 }
 
-.clip-option strong {
-  display: block;
+.clip-option-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.clip-option-details strong,
+.clip-option-details .muted {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .toast {
@@ -620,6 +699,14 @@ dialog::backdrop {
 
   .field-grid,
   .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .new-edit-clip-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .clip-picker {
     grid-template-columns: 1fr;
   }
 

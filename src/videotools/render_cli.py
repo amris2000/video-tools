@@ -49,7 +49,7 @@ def choose_edit_file(
     output_func("")
 
     for index, edit_file in enumerate(edit_files, start=1):
-        output_func(f"  {index}. {edit_file.name}")
+        output_func(f"  {index}. {edit_file.name}{_edit_clip_count_hint(edit_file)}")
 
     output_func("")
 
@@ -73,6 +73,20 @@ def choose_edit_file(
             continue
 
         return edit_files[index - 1]
+
+
+def _edit_clip_count_hint(edit_file: Path) -> str:
+    try:
+        document = read_edit_document(edit_file)
+    except (OSError, ValueError):
+        return ""
+
+    clips = document.get("clips")
+    if not isinstance(clips, list):
+        return ""
+
+    count = len(clips)
+    return f" ({count} clip{'s' if count != 1 else ''})"
 
 
 def print_no_edits_message(
