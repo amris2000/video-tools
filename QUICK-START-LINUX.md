@@ -193,6 +193,15 @@ Each `sample-edit` or `select-edit` run creates a new timestamped file inside
 `video-tools render` then interactively asks for the render mode and which edit
 file to render, and writes a fresh timestamped MP4 to `exports/` on every run.
 
+In `video-tools editor`, the top navigation has two views:
+
+- `Edit`: create and modify timeline JSON files in `edits/`.
+- `View renders`: read-only browser/player for `.mp4` files already present in
+	`exports/`.
+
+The renders view does not delete, rename, or render files; it only lists and
+plays rendered videos.
+
 ---
 
 # Journal

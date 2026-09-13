@@ -54,9 +54,30 @@ video {
 .hero,
 .topbar,
 .output-row,
+.nav-panel,
 .timeline-panel,
 .inspector-panel {
   padding: 20px 22px;
+}
+
+.nav-panel {
+  margin-bottom: 20px;
+}
+
+.top-nav {
+  display: flex;
+  gap: 10px;
+}
+
+.nav-tab {
+  border: 1px solid rgba(74, 49, 22, 0.2);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.nav-tab.active {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: #fff7f2;
 }
 
 .hero {
@@ -206,6 +227,38 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.renders-panel {
+  padding: 20px 22px;
+}
+
+.renders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.render-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.render-item {
+  text-align: left;
+  border: 1px solid rgba(74, 49, 22, 0.14);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.render-item.selected {
+  border-color: rgba(180, 85, 45, 0.6);
+  box-shadow: 0 0 0 3px rgba(180, 85, 45, 0.12);
+}
+
+.render-player-slot {
+  margin-top: 2px;
 }
 
 .timeline-item {

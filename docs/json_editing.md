@@ -4,6 +4,23 @@
 one MP4 file. The edit is described in JSON, so no project database is
 required, and the local web editor works directly with those JSON files.
 
+## Local Editor Views
+
+Start the local editor from a project root:
+
+```bash
+video-tools editor
+```
+
+The app has two top-level views:
+
+- `Edit`: full timeline editing for JSON files stored in `edits/`.
+- `View renders`: read-only list and player for rendered `.mp4` files in
+  `exports/`.
+
+`View renders` never modifies files. It only refreshes the list and streams
+selected videos for playback.
+
 The implementation deliberately supports one ordered track of video clips. It
 does not yet implement transitions, effects, titles, music, multiple tracks,
 speed changes, or volume automation.

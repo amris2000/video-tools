@@ -2,6 +2,9 @@ const state = {
   project: null,
   edits: [],
   clips: [],
+  renders: [],
+  currentView: "edit",
+  currentRenderFilename: "",
   clipMap: new Map(),
   currentFilename: "",
   document: { version: 1, output: "", clips: [] },
@@ -16,6 +19,10 @@ const state = {
 const elements = {
   projectLine: document.getElementById("projectLine"),
   dirtyBadge: document.getElementById("dirtyBadge"),
+  viewEditButton: document.getElementById("viewEditButton"),
+  viewRendersButton: document.getElementById("viewRendersButton"),
+  editView: document.getElementById("editView"),
+  rendersView: document.getElementById("rendersView"),
   editSelect: document.getElementById("editSelect"),
   outputInput: document.getElementById("outputInput"),
   saveButton: document.getElementById("saveButton"),
@@ -59,6 +66,11 @@ const elements = {
   clipSearchInput: document.getElementById("clipSearchInput"),
   clipList: document.getElementById("clipList"),
   clipCancelButton: document.getElementById("clipCancelButton"),
+  refreshRendersButton: document.getElementById("refreshRendersButton"),
+  rendersEmpty: document.getElementById("rendersEmpty"),
+  rendersList: document.getElementById("rendersList"),
+  renderPlayerWrap: document.getElementById("renderPlayerWrap"),
+  renderVideo: document.getElementById("renderVideo"),
   toast: document.getElementById("toast"),
 };
 
@@ -132,6 +144,10 @@ function formatSeconds(value) {
 
 function mediaUrl(relativePath) {
   return `/media/${relativePath.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function renderUrl(filename) {
+  return `/renders/${encodeURIComponent(filename)}`;
 }
 
 function showToast(message) {
@@ -270,14 +286,95 @@ function renderInspector() {
 }
 
 function renderAll() {
+  renderView();
   renderEditSelector();
   renderTimeline();
   renderInspector();
+  renderRendersList();
   elements.outputInput.value = state.document.output || "";
   elements.renameButton.disabled = !state.currentFilename || state.dirty;
   elements.saveAsButton.disabled = !state.currentFilename;
   elements.deleteButton.disabled = !state.currentFilename;
   updateDirtyState();
+}
+
+function renderView() {
+  const editActive = state.currentView === "edit";
+  elements.editView.classList.toggle("hidden", !editActive);
+  elements.rendersView.classList.toggle("hidden", editActive);
+  elements.viewEditButton.classList.toggle("active", editActive);
+  elements.viewRendersButton.classList.toggle("active", !editActive);
+  elements.viewEditButton.setAttribute("aria-selected", editActive ? "true" : "false");
+  elements.viewRendersButton.setAttribute("aria-selected", editActive ? "false" : "true");
+}
+
+function renderRendersList() {
+  elements.rendersList.innerHTML = "";
+  const hasRenders = state.renders.length > 0;
+  elements.rendersEmpty.classList.toggle("hidden", hasRenders);
+
+  if (!hasRenders) {
+    state.currentRenderFilename = "";
+    elements.renderVideo.removeAttribute("src");
+    elements.renderVideo.load();
+    elements.renderPlayerWrap.classList.add("hidden");
+    return;
+  }
+
+  if (!state.currentRenderFilename || !state.renders.some((item) => item.filename === state.currentRenderFilename)) {
+    state.currentRenderFilename = state.renders[0].filename;
+  }
+
+  for (const renderItem of state.renders) {
+    const row = document.createElement("div");
+    row.className = "render-row";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "render-item";
+    if (renderItem.filename === state.currentRenderFilename) {
+      button.classList.add("selected");
+    }
+    button.textContent = renderItem.filename;
+    button.addEventListener("click", () => {
+      state.currentRenderFilename = renderItem.filename;
+      renderRendersList();
+    });
+
+    row.append(button);
+
+    if (renderItem.filename === state.currentRenderFilename) {
+      const playerSlot = document.createElement("div");
+      playerSlot.className = "render-player-slot";
+      playerSlot.append(elements.renderPlayerWrap);
+      row.append(playerSlot);
+    }
+
+    elements.rendersList.append(row);
+  }
+
+  const selectedFilename = state.currentRenderFilename;
+  if (elements.renderVideo.dataset.currentFile !== selectedFilename) {
+    elements.renderVideo.dataset.currentFile = selectedFilename;
+    elements.renderVideo.src = renderUrl(selectedFilename);
+    elements.renderVideo.load();
+  }
+  elements.renderPlayerWrap.classList.remove("hidden");
+}
+
+async function refreshRenders() {
+  const data = await api("/api/renders");
+  state.renders = data.renders;
+  renderRendersList();
+}
+
+async function switchView(view) {
+  state.currentView = view;
+  renderView();
+
+  if (view === "renders") {
+    await refreshRenders();
+  }
 }
 
 async function refreshEdits() {
@@ -548,6 +645,15 @@ elements.newButton.addEventListener("click", () => openDialog("new").catch(repor
 elements.saveAsButton.addEventListener("click", () => openDialog("save-as").catch(reportError));
 elements.addClipButton.addEventListener("click", () => elements.clipDialog.showModal());
 elements.deleteButton.addEventListener("click", () => handleDelete().catch(reportError));
+elements.viewEditButton.addEventListener("click", () => {
+  switchView("edit").catch(reportError);
+});
+elements.viewRendersButton.addEventListener("click", () => {
+  switchView("renders").catch(reportError);
+});
+elements.refreshRendersButton.addEventListener("click", () => {
+  refreshRenders().catch(reportError);
+});
 
 elements.renameButton.addEventListener("click", () => {
   if (state.dirty) {

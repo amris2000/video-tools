@@ -35,6 +35,11 @@ exports = "exports"
         self.clip_two = self.root / "clips" / "day-one" / "GX010020.MP4"
         self.clip_one.write_bytes(b"abcdefghijklmnopqrstuvwxyz")
         self.clip_two.write_bytes(b"0123456789abcdefghijklmnopqrstuvwxyz")
+        (self.root / "exports" / "20260913_111500_video.mp4").write_bytes(b"render-one-data")
+        (self.root / "exports" / "20260913_101500_video.mp4").write_bytes(b"render-two-data")
+        (self.root / "exports" / "ignore.txt").write_text("skip", encoding="utf-8")
+        (self.root / "exports" / "nested").mkdir()
+        (self.root / "exports" / "nested" / "nested.mp4").write_bytes(b"nested")
 
         (self.root / "metadata" / "clip_report.json").write_text(
             json.dumps(
@@ -267,6 +272,36 @@ exports = "exports"
         status, _, _, parsed = self.request("GET", "/media/..%2Fsecret.mp4")
         self.assertEqual(status, 400)
         self.assertIn("clips directory", parsed["error"])
+
+    def test_lists_and_streams_renders(self):
+        status, _, _, parsed = self.request("GET", "/api/renders")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            [item["filename"] for item in parsed["renders"]],
+            ["20260913_111500_video.mp4", "20260913_101500_video.mp4"],
+        )
+
+        status, response, data, _ = self.request(
+            "GET",
+            "/renders/20260913_111500_video.mp4",
+            headers={"Range": "bytes=0-5"},
+        )
+        self.assertEqual(status, 206)
+        self.assertEqual(data, b"render")
+        self.assertEqual(response.getheader("Content-Range"), "bytes 0-5/15")
+        self.assertEqual(response.getheader("Accept-Ranges"), "bytes")
+
+        status, _, _, parsed = self.request("GET", "/renders/..%2Fsecret.mp4")
+        self.assertEqual(status, 400)
+        self.assertIn("exports directory", parsed["error"])
+
+        status, _, _, parsed = self.request("GET", "/renders/ignore.txt")
+        self.assertEqual(status, 400)
+        self.assertIn(".mp4 extension", parsed["error"])
+
+        status, _, _, parsed = self.request("GET", "/renders/missing_video.mp4")
+        self.assertEqual(status, 404)
+        self.assertIn("not found", parsed["error"].lower())
 
     def test_send_json_ignores_client_disconnect(self):
         handler = object.__new__(EditorRequestHandler)

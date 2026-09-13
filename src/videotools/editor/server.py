@@ -113,6 +113,16 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
                         "clips": [entry.__dict__ for entry in self.server.clip_catalog]
                     },
                 )
+            elif path == "/api/renders":
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "renders": [
+                            {"filename": render_file.name}
+                            for render_file in _list_render_files(self.server.project)
+                        ]
+                    },
+                )
             elif path.startswith("/api/edits/"):
                 filename = self._edit_filename_from_path(path)
                 document = load_edit_document(self.server.project, filename)
@@ -124,6 +134,8 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.OK, document)
             elif path.startswith("/media/"):
                 self._serve_media(path.removeprefix("/media/"))
+            elif path.startswith("/renders/"):
+                self._serve_render(path.removeprefix("/renders/"))
             else:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "Not found.")
         except CLIENT_DISCONNECT_ERRORS:
@@ -259,34 +271,11 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_media(self, encoded_relative_path: str) -> None:
         media_file = _resolve_media_path(self.server.project, unquote(encoded_relative_path))
-        content_type, _ = mimetypes.guess_type(str(media_file))
-        file_size = media_file.stat().st_size
-        range_header = self.headers.get("Range")
+        _serve_file_with_ranges(self, media_file)
 
-        if range_header:
-            start, end = _parse_range_header(range_header, file_size)
-            if start is None or end is None:
-                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                self.send_header("Content-Range", f"bytes */{file_size}")
-                self.end_headers()
-                return
-
-            length = end - start + 1
-            self.send_response(HTTPStatus.PARTIAL_CONTENT)
-            self.send_header("Content-Type", content_type or "application/octet-stream")
-            self.send_header("Accept-Ranges", "bytes")
-            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
-            self.send_header("Content-Length", str(length))
-            self.end_headers()
-            _stream_file(self.wfile, media_file, start=start, length=length)
-            return
-
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type or "application/octet-stream")
-        self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Content-Length", str(file_size))
-        self.end_headers()
-        _stream_file(self.wfile, media_file, start=0, length=file_size)
+    def _serve_render(self, encoded_filename: str) -> None:
+        render_file = _resolve_render_path(self.server.project, unquote(encoded_filename))
+        _serve_file_with_ranges(self, render_file)
 
     def _read_json_body(self) -> dict[str, Any]:
         try:
@@ -331,6 +320,73 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
 
     def _send_error_json(self, status: HTTPStatus, message: str) -> None:
         self._send_json(status, {"error": message})
+
+
+def _serve_file_with_ranges(handler: EditorRequestHandler, file_path: Path) -> None:
+    content_type, _ = mimetypes.guess_type(str(file_path))
+    file_size = file_path.stat().st_size
+    range_header = handler.headers.get("Range")
+
+    if range_header:
+        start, end = _parse_range_header(range_header, file_size)
+        if start is None or end is None:
+            handler.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+            handler.send_header("Content-Range", f"bytes */{file_size}")
+            handler.end_headers()
+            return
+
+        length = end - start + 1
+        handler.send_response(HTTPStatus.PARTIAL_CONTENT)
+        handler.send_header("Content-Type", content_type or "application/octet-stream")
+        handler.send_header("Accept-Ranges", "bytes")
+        handler.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        handler.send_header("Content-Length", str(length))
+        handler.end_headers()
+        _stream_file(handler.wfile, file_path, start=start, length=length)
+        return
+
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", content_type or "application/octet-stream")
+    handler.send_header("Accept-Ranges", "bytes")
+    handler.send_header("Content-Length", str(file_size))
+    handler.end_headers()
+    _stream_file(handler.wfile, file_path, start=0, length=file_size)
+
+
+def _list_render_files(project: VideoProject) -> list[Path]:
+    exports_dir = project.exports_dir
+    exports_dir.mkdir(parents=True, exist_ok=True)
+
+    return sorted(
+        (
+            path
+            for path in exports_dir.iterdir()
+            if path.is_file() and path.suffix.lower() == ".mp4"
+        ),
+        reverse=True,
+    )
+
+
+def _resolve_render_path(project: VideoProject, filename: str) -> Path:
+    value = filename.strip()
+    candidate = Path(value)
+
+    if not value:
+        raise ValueError("Render filename is required.")
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError("Render filename must stay inside the project's exports directory.")
+    if "/" in value or "\\" in value or len(candidate.parts) != 1:
+        raise ValueError("Render filename must not include directory separators.")
+    if candidate.suffix.lower() != ".mp4":
+        raise ValueError("Render filename must use the .mp4 extension.")
+
+    target = (project.exports_dir / candidate.name).resolve()
+    if not target.is_relative_to(project.exports_dir):
+        raise ValueError("Render filename must stay inside the project's exports directory.")
+    if not target.is_file():
+        raise FileNotFoundError("Render file was not found.")
+
+    return target
 
 
 def start_editor_server(
