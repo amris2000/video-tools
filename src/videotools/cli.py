@@ -2,6 +2,9 @@ import argparse
 from pathlib import Path
 import sys
 
+import webbrowser
+from importlib.resources import files
+
 from videotools.edit import EditValidationError, load_edit_timeline
 from videotools.init_project import create_project
 from videotools.metadata import analyze_project
@@ -21,6 +24,8 @@ from videotools.organize import organize_clips
 from videotools.thumbnails import (
     generate_project_thumbnails,
 )
+
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -42,6 +47,11 @@ def main():
     subparsers.add_parser(
         "project",
         help="Show the current video project.",
+    )
+
+    subparsers.add_parser(
+        "editor",
+        help="Open the video edit JSON editor in your browser.",
     )
 
     probe_parser = subparsers.add_parser(
@@ -166,6 +176,25 @@ def main():
         print(f"Created video project: {args.name}")
         print(f"Location: {project_dir}")
         print()
+
+        return
+
+    if args.command == "editor":
+        editor_file = files("videotools").joinpath(
+            "editor",
+            "index.html",
+        )
+
+        url = editor_file.as_uri()
+
+        print(f"Opening editor: {url}")
+
+        if not webbrowser.open(url):
+            print(
+                "Could not automatically open a browser.",
+                file=sys.stderr,
+            )
+            print(f"Open this manually: {url}")
 
         return
 
