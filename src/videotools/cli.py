@@ -6,6 +6,7 @@ import webbrowser
 from importlib.resources import files
 
 from videotools.edit import EditValidationError, load_edit_timeline
+from videotools.edit_files import ensure_edits_dir
 from videotools.init_project import create_project
 from videotools.metadata import analyze_project
 from videotools.project import VideoProject, find_project_root
@@ -107,24 +108,12 @@ def main():
 
     sample_edit_parser = subparsers.add_parser(
         "sample-edit",
-        help="Create test-edit.json from existing project clips.",
-    )
-
-    sample_edit_parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace test-edit.json if it already exists.",
+        help="Create a timestamped sample edit from project clips.",
     )
 
     select_edit_parser = subparsers.add_parser(
         "select-edit",
-        help="Interactively select clips for selected-edit.json.",
-    )
-
-    select_edit_parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace selected-edit.json if it already exists.",
+        help="Interactively select clips and create a timestamped edit.",
     )
 
     journal_parser = subparsers.add_parser(
@@ -179,7 +168,15 @@ def main():
 
         return
 
-    if args.command == "editor":
+    # All commands below this point require an existing project
+    project_root = find_project_root()
+
+    if args.command == "project":
+        print(f"Project: {project_root}")
+
+    elif args.command == "editor":
+        project = VideoProject.load(project_root)
+        ensure_edits_dir(project)
         editor_file = files("videotools").joinpath(
             "editor",
             "index.html",
@@ -187,6 +184,7 @@ def main():
 
         url = editor_file.as_uri()
 
+        print(f"Project: {project.root}")
         print(f"Opening editor: {url}")
 
         if not webbrowser.open(url):
@@ -195,14 +193,6 @@ def main():
                 file=sys.stderr,
             )
             print(f"Open this manually: {url}")
-
-        return
-
-    # All commands below this point require an existing project
-    project_root = find_project_root()
-
-    if args.command == "project":
-        print(f"Project: {project_root}")
 
     elif args.command == "probe":
         analyze_project(
@@ -247,10 +237,7 @@ def main():
     elif args.command == "sample-edit":
         try:
             project = VideoProject.load(project_root)
-            result = create_sample_edit(
-                project,
-                overwrite=args.overwrite,
-            )
+            result = create_sample_edit(project)
         except (SampleEditError, OSError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
             raise SystemExit(1) from error
@@ -259,14 +246,16 @@ def main():
         print(f"Selected clips: {result.clip_count}")
         if result.skipped_count:
             print(f"Skipped clips: {result.skipped_count}")
-        print("Render it with: video-tools render test-edit.json")
+        print(
+            "Render it with: "
+            f"video-tools render {result.edit_file.relative_to(project.root).as_posix()}"
+        )
 
     elif args.command == "select-edit":
         try:
             project = VideoProject.load(project_root)
             result = create_selected_edit(
                 project,
-                overwrite=args.overwrite,
             )
         except (SampleEditError, OSError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
@@ -276,7 +265,10 @@ def main():
         print(f"Selected clips: {result.clip_count}")
         if result.skipped_count:
             print(f"Unavailable clips: {result.skipped_count}")
-        print("Render it with: video-tools render selected-edit.json")
+        print(
+            "Render it with: "
+            f"video-tools render {result.edit_file.relative_to(project.root).as_posix()}"
+        )
 
     elif args.command == "journal":
         if args.journal_command == "add":

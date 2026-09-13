@@ -76,6 +76,7 @@ test-project/
 ├── project.toml
 ├── journal.json
 ├── clips/
+├── edits/
 ├── metadata/
 │   └── thumbnails/
 └── exports/
@@ -162,6 +163,9 @@ test-project/
 │   └── 20260911/
 │       └── GX010003.MP4
 │
+├── edits/
+│   └── 20260913_092145_edit.json
+│
 ├── metadata/
 │   ├── clip_report.json
 │   ├── clip_report.html
@@ -171,9 +175,20 @@ test-project/
 │       └── GX010003-....webp
 │
 └── exports/
+	└── 20260913_092145_video.mp4
 ```
 
 `clip_report.json` contains the metadata used by the React frontend, including video information, thumbnails, journal matches, GoPro telemetry detection, and GPS information when available.
+
+To create a new edit timeline JSON and then render it:
+
+```bash
+video-tools sample-edit
+video-tools render edits/20260913_092145_edit.json
+```
+
+Each `sample-edit` or `select-edit` run creates a new timestamped file inside
+`edits/` rather than replacing a fixed filename in the project root.
 
 ---
 

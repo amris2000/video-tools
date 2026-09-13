@@ -24,6 +24,8 @@ def create_project(
 
     (project_dir / "clips").mkdir()
 
+    (project_dir / "edits").mkdir()
+
     (
         project_dir
         / "metadata"
@@ -41,6 +43,7 @@ timezone = "Europe/Copenhagen"
 
 [paths]
 clips = "clips"
+edits = "edits"
 metadata = "metadata"
 exports = "exports"
 journal = "journal.json"

@@ -55,6 +55,10 @@ class VideoProject:
         return self._configured_path("exports", "exports")
 
     @property
+    def edits_dir(self) -> Path:
+        return self._configured_path("edits", "edits")
+
+    @property
     def journal_file(self) -> Path:
         return self._configured_path("journal", "journal.json")
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -58,7 +59,13 @@ exports = "exports"
 
         self.assertEqual(result.clip_count, 2)
         self.assertEqual(result.skipped_count, 1)
-        self.assertEqual(document["output"], "test-video.mp4")
+        self.assertEqual(result.edit_file.parent, self.project.edits_dir)
+        self.assertRegex(result.edit_file.name, r"^\d{8}_\d{6}_edit\.json$")
+        self.assertRegex(document["output"], r"^\d{8}_\d{6}_video\.mp4$")
+        self.assertEqual(
+            document["output"],
+            result.edit_file.name.replace("_edit.json", "_video.mp4"),
+        )
         self.assertEqual(document["clips"][0]["file"], "day-one/first.mp4")
         self.assertEqual(document["clips"][0]["start"], 3.5)
         self.assertEqual(document["clips"][0]["end"], 6.5)
@@ -81,13 +88,23 @@ exports = "exports"
 
     @patch("videotools.sample_edit.shutil.which", return_value="ffprobe")
     @patch("videotools.sample_edit.probe_stream_signature")
-    def test_does_not_overwrite_existing_edit(self, probe, which):
-        del probe, which
+    def test_creates_unique_file_when_timestamp_collides(self, probe, which):
+        del which
         self.add_clip("clip.mp4")
-        (self.root / "test-edit.json").write_text("existing", encoding="utf-8")
+        probe.return_value = self.signature(duration=10.0, width=3840)
+        self.project.edits_dir.mkdir(parents=True, exist_ok=True)
+        existing = self.project.edits_dir / "20260913_092145_edit.json"
+        existing.write_text("existing", encoding="utf-8")
 
-        with self.assertRaisesRegex(SampleEditError, "already exists"):
-            create_sample_edit(self.project)
+        with patch("videotools.edit_files.datetime") as mocked_datetime:
+            mocked_datetime.now.return_value = datetime(2026, 9, 13, 9, 21, 45)
+
+            result = create_sample_edit(self.project)
+
+        self.assertEqual(
+            result.edit_file,
+            self.project.edits_dir / "20260913_092145_2_edit.json",
+        )
 
     @patch("videotools.sample_edit.shutil.which", return_value="ffprobe")
     @patch("videotools.sample_edit.probe_stream_signature")
@@ -111,7 +128,13 @@ exports = "exports"
         document = json.loads(result.edit_file.read_text(encoding="utf-8"))
 
         self.assertEqual(result.clip_count, 2)
-        self.assertEqual(document["output"], "selected-video.mp4")
+        self.assertEqual(result.edit_file.parent, self.project.edits_dir)
+        self.assertRegex(result.edit_file.name, r"^\d{8}_\d{6}_edit\.json$")
+        self.assertRegex(document["output"], r"^\d{8}_\d{6}_video\.mp4$")
+        self.assertEqual(
+            document["output"],
+            result.edit_file.name.replace("_edit.json", "_video.mp4"),
+        )
         self.assertEqual(document["clips"][0]["file"], "second.mp4")
         self.assertEqual(document["clips"][1]["file"], "first.mp4")
         self.assertEqual(document["clips"][0]["start"], 2.5)

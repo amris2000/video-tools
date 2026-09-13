@@ -122,6 +122,28 @@ journal = "journal.json"
         with self.assertRaisesRegex(EditValidationError, "not supported in version 1"):
             load_edit_timeline(self.write_edit(value), self.project)
 
+    def test_loads_edit_file_from_project_edits_directory(self):
+        value = self.valid_edit()
+        edits_dir = self.root / "edits"
+        edits_dir.mkdir()
+        edit_file = edits_dir / "20260913_092145_edit.json"
+        edit_file.write_text(json.dumps(value), encoding="utf-8")
+
+        timeline = load_edit_timeline(edit_file, self.project)
+
+        self.assertEqual(timeline.output, self.root / "exports" / "ride.mp4")
+
+    def test_root_level_edit_file_still_loads_when_explicitly_passed(self):
+        timeline = load_edit_timeline(
+            self.write_edit(self.valid_edit()),
+            self.project,
+        )
+
+        self.assertEqual(
+            timeline.clips[0].file,
+            self.root / "clips" / "day-one" / "GX010017.MP4",
+        )
+
     def test_reports_json_location(self):
         edit_file = self.root / "edit.json"
         edit_file.write_text('{"output":', encoding="utf-8")

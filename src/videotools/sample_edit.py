@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import shutil
 
+from videotools.edit_files import create_new_edit_file
 from videotools.media import VIDEO_EXTENSIONS
 from videotools.project import VideoProject
 from videotools.render import (
@@ -36,19 +37,10 @@ class ProbedClip:
 def create_sample_edit(
     project: VideoProject,
     *,
-    overwrite: bool = False,
     max_clips: int = 3,
     selection_seconds: float = 3.0,
 ) -> SampleEditResult:
-    """Create test-edit.json from a compatible group of project clips."""
-
-    edit_file = project.root / "test-edit.json"
-
-    if edit_file.exists() and not overwrite:
-        raise SampleEditError(
-            f"Sample edit already exists: {edit_file}. "
-            "Use --overwrite to replace it."
-        )
+    """Create a timestamped edit from a compatible group of project clips."""
 
     if max_clips < 1:
         raise ValueError("max_clips must be at least 1.")
@@ -69,6 +61,7 @@ def create_sample_edit(
         groups.setdefault(key, []).append(clip)
 
     compatible_clips = max(groups.values(), key=len)[:max_clips]
+    edit_file, output_name = create_new_edit_file(project)
     selections = [
         _selection(
             project,
@@ -81,7 +74,7 @@ def create_sample_edit(
 
     document = {
         "version": 1,
-        "output": "test-video.mp4",
+        "output": output_name,
         "clips": selections,
     }
 
@@ -97,20 +90,11 @@ def create_sample_edit(
 def create_selected_edit(
     project: VideoProject,
     *,
-    overwrite: bool = False,
     selection_seconds: float = 3.0,
     input_func: Callable[[str], str] = input,
     output_func: Callable[[str], None] = print,
 ) -> SampleEditResult:
     """Interactively choose clips in timeline order."""
-
-    edit_file = project.root / "selected-edit.json"
-
-    if edit_file.exists() and not overwrite:
-        raise SampleEditError(
-            f"Selected edit already exists: {edit_file}. "
-            "Use --overwrite to replace it."
-        )
 
     if selection_seconds <= 0:
         raise ValueError("selection_seconds must be greater than zero.")
@@ -171,9 +155,11 @@ def create_selected_edit(
     if not selected:
         raise SampleEditError("No clips selected; no edit file was created.")
 
+    edit_file, output_name = create_new_edit_file(project)
+
     document = {
         "version": 1,
-        "output": "selected-video.mp4",
+        "output": output_name,
         "clips": [
             _selection(
                 project,

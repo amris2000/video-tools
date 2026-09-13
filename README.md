@@ -29,6 +29,7 @@ C:\Users\Frederik\
         ├── vacation-2026\
         │   ├── project.toml
         │   ├── clips\
+        │   ├── edits\
         │   ├── metadata\
         │   ├── exports\
         │   └── journal.json
@@ -36,6 +37,7 @@ C:\Users\Frederik\
         ├── scripting-test\
         │   ├── project.toml
         │   ├── clips\
+        │   ├── edits\
         │   ├── metadata\
         │   └── exports\
         │
@@ -257,6 +259,7 @@ A project contains:
 vacation-2026\
 ├── project.toml
 ├── clips\
+├── edits\
 ├── metadata\
 ├── exports\
 └── journal.json
@@ -290,6 +293,21 @@ metadata\
 └── telemetry.json
 ```
 
+## `edits/`
+
+JSON edit timelines for local rendering and, later, the local web editor.
+
+Example:
+
+```text
+edits\
+├── 20260913_092145_edit.json
+└── 20260913_101422_edit.json
+```
+
+The JSON `file` entries remain relative to `clips/`, and the JSON `output`
+entry remains relative to `exports/`.
+
 ## `exports/`
 
 Rendered output from DaVinci Resolve or other generated video files.
@@ -315,6 +333,7 @@ name = "vacation-2026"
 
 [paths]
 clips = "clips"
+edits = "edits"
 metadata = "metadata"
 exports = "exports"
 journal = "journal.json"

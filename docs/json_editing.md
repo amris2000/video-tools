@@ -115,18 +115,20 @@ video-tools sample-edit
 ```
 
 This scans the project recursively, reads clip durations with `ffprobe`, and
-creates `test-edit.json` in the project root. It chooses up to three videos with
-matching stream formats and takes a centered selection of at most three seconds
-from each. The generated output name is `test-video.mp4`.
+creates a new timestamped edit JSON inside `edits/`, for example
+`edits/20260913_092145_edit.json`. It chooses up to three videos with matching
+stream formats and takes a centered selection of at most three seconds from
+each. The generated output name uses the same identifier, for example
+`20260913_092145_video.mp4`.
 
 The compatibility grouping means the generated edit works with accurate mode
 and, when keyframe-aligned cuts are acceptable, fast mode. Unreadable and very
-short clips are skipped. An existing `test-edit.json` is protected unless
-overwriting is requested:
+short clips are skipped. Each run creates a new JSON timeline and does not
+replace an older edit file:
 
 ```bash
-video-tools sample-edit --overwrite
-video-tools render test-edit.json
+video-tools sample-edit
+video-tools render edits/20260913_092145_edit.json
 ```
 
 The command only writes the JSON instructions. It does not render or modify
@@ -147,13 +149,15 @@ more than once. Enter `q`, `quit`, or `done` when the selection is complete.
 Each choice receives a centered segment of up to three seconds, just like
 `sample-edit`. Clips incompatible with the first selection are rejected with an
 explanation so the resulting timeline can be rendered in accurate mode. The
-command creates `selected-edit.json`, targeting `selected-video.mp4`:
+command creates a new timestamped JSON file under `edits/` and sets the JSON
+`output` field to the matching timestamped export filename:
 
 ```bash
-video-tools render selected-edit.json
+video-tools render edits/20260913_093012_edit.json
 ```
 
-Use `video-tools select-edit --overwrite` to replace an existing selection.
+The JSON `file` values still stay relative to `clips/`, and the JSON `output`
+value still stays relative to `exports/`.
 
 ## Command help
 

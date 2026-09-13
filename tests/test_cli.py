@@ -26,6 +26,36 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("video-tools journal add", text)
         self.assertIn("video-tools journal list", text)
 
+    def test_editor_command_requires_project_and_prepares_edits_dir(self):
+        output = StringIO()
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "clips").mkdir()
+            (root / "exports").mkdir()
+            (root / "project.toml").write_text(
+                """\
+name = "cli-project"
+
+[paths]
+clips = "clips"
+exports = "exports"
+""",
+                encoding="utf-8",
+            )
+
+            with patch("sys.argv", ["video-tools", "editor"]):
+                with patch("pathlib.Path.cwd", return_value=root):
+                    with patch("webbrowser.open", return_value=True):
+                        with redirect_stdout(output):
+                            main()
+
+            self.assertTrue((root / "edits").is_dir())
+
+        text = output.getvalue()
+        self.assertIn("Project:", text)
+        self.assertIn("Opening editor:", text)
+
 
 if __name__ == "__main__":
     unittest.main()
