@@ -21,3 +21,4 @@ video-tools thumbnails
 video-tools probe
 video-tools sample-edit
 video-tools render
+video-tools social

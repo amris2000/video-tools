@@ -79,7 +79,8 @@ test-project/
 ├── edits/
 ├── metadata/
 │   └── thumbnails/
-└── exports/
+├── exports/
+└── exports-social/
 ```
 
 You do **not** need to run `mkdir test-project` first. The `video-tools init` command creates the project directory for you.
@@ -185,7 +186,12 @@ To create a new edit timeline JSON and then render it:
 ```bash
 video-tools sample-edit
 video-tools render
+video-tools social
 ```
+
+`video-tools social` interactively picks a rendered MP4 from `exports/`, applies
+the Instagram Reel / Story preset, and writes a new upload-ready MP4 to
+`exports-social/`.
 
 Each `sample-edit` or `select-edit` run creates a new timestamped file inside
 `edits/` rather than replacing a fixed filename in the project root.

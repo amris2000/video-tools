@@ -32,6 +32,7 @@ C:\Users\Frederik\
         │   ├── edits\
         │   ├── metadata\
         │   ├── exports\
+        │   ├── exports-social\
         │   └── journal.json
         │
         ├── scripting-test\
@@ -39,7 +40,8 @@ C:\Users\Frederik\
         │   ├── clips\
         │   ├── edits\
         │   ├── metadata\
-        │   └── exports\
+        │   ├── exports\
+        │   └── exports-social\
         │
         └── another-video\
 ```
@@ -262,6 +264,7 @@ vacation-2026\
 ├── edits\
 ├── metadata\
 ├── exports\
+├── exports-social\
 └── journal.json
 ```
 
@@ -311,6 +314,11 @@ entry remains relative to `exports/`.
 ## `exports/`
 
 Rendered output from DaVinci Resolve or other generated video files.
+
+## `exports-social/`
+
+Social-media conversion outputs created from existing files in `exports/`.
+The source render is preserved.
 
 ## `journal.json`
 

@@ -9,6 +9,8 @@ from videotools.metadata import analyze_project
 from videotools.project import VideoProject, find_project_root
 from videotools.render import RenderError
 from videotools.render_cli import run_render_workflow
+from videotools.social import SocialExportError
+from videotools.social_cli import run_social_workflow
 from videotools.sample_edit import (
     SampleEditError,
     create_sample_edit,
@@ -85,8 +87,18 @@ def main():
         help="Interactively choose and render an edit timeline.",
         description=(
             "Interactively choose a render mode and edit timeline. "
-            "Every render creates a new timestamped MP4 in exports/, "
-            "for example YYYYMMDD_HHMMSS_accurate.mp4 or YYYYMMDD_HHMMSS_fast.mp4."
+            "Rendering uses the selected edit's output path, and falls back to "
+            "a timestamped default when an edit has no output field."
+        ),
+    )
+
+    subparsers.add_parser(
+        "social",
+        help="Convert a rendered video for social-media upload.",
+        description=(
+            "Interactively choose a source video from exports/, then convert it "
+            "using a social preset and framing mode. The converted MP4 is written "
+            "to exports-social/ and the original render is not modified."
         ),
     )
 
@@ -183,6 +195,14 @@ def main():
             project = VideoProject.load(project_root)
             run_render_workflow(project)
         except (EditValidationError, RenderError, OSError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            raise SystemExit(1) from error
+
+    elif args.command == "social":
+        try:
+            project = VideoProject.load(project_root)
+            run_social_workflow(project)
+        except (SocialExportError, OSError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
             raise SystemExit(1) from error
 

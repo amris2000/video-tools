@@ -46,12 +46,13 @@ The renderer uses the paths in the project's `project.toml`:
 ```text
 my-project/
 ├── project.toml
-├── edit.json
+├── edits/
 ├── clips/
 │   └── 20260912/
 │       ├── GX010017.MP4
 │       └── GX010018.MP4
-└── exports/
+├── exports/
+└── exports-social/
 ```
 
 For example:
@@ -68,6 +69,8 @@ journal = "journal.json"
 
 Source paths in the edit file are relative to `clips`. Output paths are
 relative to `exports`. This keeps a project portable between computers.
+
+Social-media derivatives are written to `exports-social/`.
 
 ## Edit-file format
 
@@ -221,10 +224,65 @@ Available edits:
 Choose edit: 2
 ```
 
-The render summary then shows the selected edit and the generated output path,
-for example `exports/20260913_105103_accurate.mp4`. A later render of the same
-edit creates a different timestamped MP4 rather than overwriting the earlier
-export.
+The render summary shows the selected edit and output path. When the edit JSON
+already has an `output` value, that path is used. Legacy edits missing an
+`output` field fall back to a generated timestamped default in `exports/`.
+
+## Social conversion
+
+After rendering, create an upload-oriented file from an existing render:
+
+```bash
+video-tools social
+```
+
+The command interactively selects:
+
+- source file from `exports/`
+- social preset (currently Instagram Reel / Story)
+- framing mode (crop to fill or fit with padding)
+
+It writes a new file to `exports-social/` and never modifies the source render.
+
+Example flow:
+
+```text
+Available renders:
+
+  1. 20260913_105103_accurate.mp4
+  2. 20260913_103402_fast.mp4
+
+Choose render: 1
+
+Social format:
+
+  1. Instagram Reel / Story
+     9:16 vertical, 1080x1920, H.264/AAC
+
+Choose format [1]:
+
+Framing:
+
+  1. Crop to fill
+  2. Fit with padding
+
+Choose framing [1]:
+
+Social export:
+
+  Source:   exports/20260913_105103_accurate.mp4
+  Format:   Instagram Reel / Story
+  Framing:  Crop to fill
+  Size:     1080x1920
+  Video:    H.264
+  Audio:    AAC
+  Output:   exports-social/20260913_105103_accurate_instagram.mp4
+
+Converting...
+
+Created:
+  exports-social/20260913_105103_accurate_instagram.mp4
+```
 
 ## Accurate mode
 

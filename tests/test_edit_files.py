@@ -10,6 +10,7 @@ from videotools.edit_files import (
     create_empty_edit_document,
     create_new_edit_file,
     create_render_output_path,
+    list_render_files,
     list_edit_files,
     output_name_for_edit_filename,
     save_edit_document,
@@ -131,6 +132,21 @@ exports = "exports"
             output_path,
             self.root / "exports" / "20260913_105103_fast_2.mp4",
         )
+
+    def test_list_render_files_filters_mp4_and_sorts_newest_first(self):
+        self.project.exports_dir.mkdir(parents=True, exist_ok=True)
+        newest = self.project.exports_dir / "20260913_105103_accurate.mp4"
+        oldest = self.project.exports_dir / "20260913_093000_fast.mp4"
+        ignored = self.project.exports_dir / "notes.txt"
+        nested_dir = self.project.exports_dir / "nested"
+
+        newest.write_text("new", encoding="utf-8")
+        oldest.write_text("old", encoding="utf-8")
+        ignored.write_text("ignore", encoding="utf-8")
+        nested_dir.mkdir()
+        (nested_dir / "nested.mp4").write_text("ignore", encoding="utf-8")
+
+        self.assertEqual(list_render_files(self.project), [newest, oldest])
 
 
 if __name__ == "__main__":

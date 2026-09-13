@@ -36,6 +36,8 @@ def create_project(
 
     (project_dir / "exports").mkdir()
 
+    (project_dir / "exports-social").mkdir()
+
     # Create project.toml
     project_toml = f"""\
 name = "{name}"
@@ -46,6 +48,7 @@ clips = "clips"
 edits = "edits"
 metadata = "metadata"
 exports = "exports"
+exports_social = "exports-social"
 journal = "journal.json"
 
 [resolve]

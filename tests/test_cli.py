@@ -22,6 +22,7 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("render", text)
         self.assertIn("sample-edit", text)
         self.assertIn("select-edit", text)
+        self.assertIn("social", text)
         self.assertIn("journal", text)
         self.assertIn("video-tools journal add", text)
         self.assertIn("video-tools journal list", text)
@@ -62,9 +63,48 @@ exports = "exports"
 
         text = output.getvalue()
         self.assertIn("Interactively choose a render mode", text)
-        self.assertIn("YYYYMMDD_HHMMSS_accurate.mp4", text)
+        self.assertIn("selected edit's output path", text)
         self.assertNotIn("--overwrite", text)
         self.assertNotIn("--mode", text)
+
+    def test_social_help_describes_interactive_workflow(self):
+        output = StringIO()
+
+        with patch("sys.argv", ["video-tools", "social", "--help"]):
+            with self.assertRaises(SystemExit):
+                with redirect_stdout(output):
+                    main()
+
+        text = output.getvalue()
+        normalized = " ".join(text.split())
+        self.assertIn("source video from exports/", normalized)
+        self.assertIn("exports- social/", normalized)
+        self.assertNotIn("--overwrite", text)
+
+    def test_social_command_invokes_interactive_workflow(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "clips").mkdir()
+            (root / "exports").mkdir()
+            (root / "project.toml").write_text(
+                """\
+name = "cli-project"
+
+[paths]
+clips = "clips"
+exports = "exports"
+""",
+                encoding="utf-8",
+            )
+
+            with patch("sys.argv", ["video-tools", "social"]):
+                with patch("pathlib.Path.cwd", return_value=root):
+                    with patch("videotools.cli.run_social_workflow") as run_social_workflow_mock:
+                        with redirect_stdout(StringIO()):
+                            main()
+
+            run_social_workflow_mock.assert_called_once()
+            self.assertEqual(run_social_workflow_mock.call_args.args[0].root, root)
 
 
 

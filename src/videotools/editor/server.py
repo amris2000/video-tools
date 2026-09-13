@@ -18,6 +18,7 @@ from videotools.edit_files import (
     create_edit_document,
     create_empty_edit_document,
     delete_edit_file,
+    list_render_files,
     load_edit_document,
     list_edit_files,
     output_name_for_edit_filename,
@@ -119,7 +120,7 @@ class EditorRequestHandler(BaseHTTPRequestHandler):
                     {
                         "renders": [
                             {"filename": render_file.name}
-                            for render_file in _list_render_files(self.server.project)
+                            for render_file in list_render_files(self.server.project)
                         ]
                     },
                 )
@@ -351,20 +352,6 @@ def _serve_file_with_ranges(handler: EditorRequestHandler, file_path: Path) -> N
     handler.send_header("Content-Length", str(file_size))
     handler.end_headers()
     _stream_file(handler.wfile, file_path, start=0, length=file_size)
-
-
-def _list_render_files(project: VideoProject) -> list[Path]:
-    exports_dir = project.exports_dir
-    exports_dir.mkdir(parents=True, exist_ok=True)
-
-    return sorted(
-        (
-            path
-            for path in exports_dir.iterdir()
-            if path.is_file() and path.suffix.lower() == ".mp4"
-        ),
-        reverse=True,
-    )
 
 
 def _resolve_render_path(project: VideoProject, filename: str) -> Path:
