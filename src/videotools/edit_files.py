@@ -21,6 +21,23 @@ def create_new_edit_file(project: VideoProject) -> tuple[Path, str]:
     return resolve_edit_file(project, filename), output_name_for_edit_filename(filename)
 
 
+def create_render_output_path(project: VideoProject, mode: str) -> Path:
+    if mode not in {"accurate", "fast"}:
+        raise ValueError("Render mode must be 'accurate' or 'fast'.")
+
+    exports_dir = project.exports_dir
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    candidate = exports_dir / f"{timestamp}_{mode}.mp4"
+    counter = 2
+
+    while candidate.exists():
+        candidate = exports_dir / f"{timestamp}_{mode}_{counter}.mp4"
+        counter += 1
+
+    return candidate
+
+
 def suggested_edit_filename(project: VideoProject) -> str:
     edits_dir = ensure_edits_dir(project)
     edit_id = _next_edit_id(edits_dir)

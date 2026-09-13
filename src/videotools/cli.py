@@ -1,14 +1,14 @@
 import argparse
-from pathlib import Path
 import sys
 
-from videotools.edit import EditValidationError, load_edit_timeline
+from videotools.edit import EditValidationError
 from videotools.edit_files import ensure_edits_dir
 from videotools.editor import run_editor_server
 from videotools.init_project import create_project
 from videotools.metadata import analyze_project
 from videotools.project import VideoProject, find_project_root
-from videotools.render import RenderError, render_accurate, render_fast
+from videotools.render import RenderError
+from videotools.render_cli import run_render_workflow
 from videotools.sample_edit import (
     SampleEditError,
     create_sample_edit,
@@ -82,26 +82,12 @@ def main():
 
     render_parser = subparsers.add_parser(
         "render",
-        help="Render a JSON edit timeline.",
-    )
-
-    render_parser.add_argument(
-        "edit_file",
-        type=Path,
-        help="Path to the JSON edit file.",
-    )
-
-    render_parser.add_argument(
-        "--mode",
-        choices=("accurate", "fast"),
-        default="accurate",
-        help="Rendering strategy (default: accurate).",
-    )
-
-    render_parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace the output file if it already exists.",
+        help="Interactively choose and render an edit timeline.",
+        description=(
+            "Interactively choose a render mode and edit timeline. "
+            "Every render creates a new timestamped MP4 in exports/, "
+            "for example YYYYMMDD_HHMMSS_accurate.mp4 or YYYYMMDD_HHMMSS_fast.mp4."
+        ),
     )
 
     sample_edit_parser = subparsers.add_parser(
@@ -195,27 +181,10 @@ def main():
     elif args.command == "render":
         try:
             project = VideoProject.load(project_root)
-            timeline = load_edit_timeline(
-                args.edit_file,
-                project,
-            )
-            print(f"Rendering ({args.mode})...")
-
-            renderer = (
-                render_fast
-                if args.mode == "fast"
-                else render_accurate
-            )
-
-            output = renderer(
-                timeline,
-                overwrite=args.overwrite,
-            )
+            run_render_workflow(project)
         except (EditValidationError, RenderError, OSError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
             raise SystemExit(1) from error
-
-        print(f"Rendered: {output}")
 
     elif args.command == "sample-edit":
         try:
@@ -229,10 +198,7 @@ def main():
         print(f"Selected clips: {result.clip_count}")
         if result.skipped_count:
             print(f"Skipped clips: {result.skipped_count}")
-        print(
-            "Render it with: "
-            f"video-tools render {result.edit_file.relative_to(project.root).as_posix()}"
-        )
+        print("Render it with: video-tools render")
 
     elif args.command == "select-edit":
         try:
@@ -248,10 +214,7 @@ def main():
         print(f"Selected clips: {result.clip_count}")
         if result.skipped_count:
             print(f"Unavailable clips: {result.skipped_count}")
-        print(
-            "Render it with: "
-            f"video-tools render {result.edit_file.relative_to(project.root).as_posix()}"
-        )
+        print("Render it with: video-tools render")
 
     elif args.command == "journal":
         if args.journal_command == "add":

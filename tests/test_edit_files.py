@@ -9,6 +9,7 @@ from videotools.edit_files import (
     create_edit_document,
     create_empty_edit_document,
     create_new_edit_file,
+    create_render_output_path,
     list_edit_files,
     output_name_for_edit_filename,
     save_edit_document,
@@ -105,6 +106,31 @@ exports = "exports"
         text = (self.project.edits_dir / "draft_edit.json").read_text(encoding="utf-8")
         self.assertTrue(text.endswith("\n"))
         self.assertEqual(json.loads(text), updated)
+
+    def test_create_render_output_path_uses_mode_and_exports_dir(self):
+        with patch("videotools.edit_files.datetime") as mocked_datetime:
+            mocked_datetime.now.return_value = datetime(2026, 9, 13, 10, 51, 3)
+
+            output_path = create_render_output_path(self.project, "accurate")
+
+        self.assertEqual(
+            output_path,
+            self.root / "exports" / "20260913_105103_accurate.mp4",
+        )
+
+    def test_create_render_output_path_avoids_collisions(self):
+        self.project.exports_dir.mkdir(parents=True, exist_ok=True)
+        (self.project.exports_dir / "20260913_105103_fast.mp4").write_text("old", encoding="utf-8")
+
+        with patch("videotools.edit_files.datetime") as mocked_datetime:
+            mocked_datetime.now.return_value = datetime(2026, 9, 13, 10, 51, 3)
+
+            output_path = create_render_output_path(self.project, "fast")
+
+        self.assertEqual(
+            output_path,
+            self.root / "exports" / "20260913_105103_fast_2.mp4",
+        )
 
 
 if __name__ == "__main__":

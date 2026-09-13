@@ -184,11 +184,14 @@ To create a new edit timeline JSON and then render it:
 
 ```bash
 video-tools sample-edit
-video-tools render edits/20260913_092145_edit.json
+video-tools render
 ```
 
 Each `sample-edit` or `select-edit` run creates a new timestamped file inside
 `edits/` rather than replacing a fixed filename in the project root.
+
+`video-tools render` then interactively asks for the render mode and which edit
+file to render, and writes a fresh timestamped MP4 to `exports/` on every run.
 
 ---
 

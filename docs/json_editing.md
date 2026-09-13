@@ -128,7 +128,7 @@ replace an older edit file:
 
 ```bash
 video-tools sample-edit
-video-tools render edits/20260913_092145_edit.json
+video-tools render
 ```
 
 The command only writes the JSON instructions. It does not render or modify
@@ -153,7 +153,7 @@ command creates a new timestamped JSON file under `edits/` and sets the JSON
 `output` field to the matching timestamped export filename:
 
 ```bash
-video-tools render edits/20260913_093012_edit.json
+video-tools render
 ```
 
 The JSON `file` values still stay relative to `clips/`, and the JSON `output`
@@ -178,31 +178,43 @@ video-tools select-edit --help
 Run the command from the project root or any directory beneath it:
 
 ```bash
-video-tools render edit.json
+video-tools render
 ```
 
-Accurate rendering is the default. The two modes can also be selected
-explicitly:
+The CLI now prompts you to choose a render mode and then select one of the edit
+JSON files found in `edits/`. Each render produces a brand-new timestamped MP4
+inside `exports/`:
 
 ```bash
-video-tools render edit.json --mode accurate
-video-tools render edit.json --mode fast
+Render mode:
+
+  1. Accurate
+     Exact cuts with re-encoding. Recommended for normal use.
+
+  2. Fast
+     Stream-copy rendering. Faster, but requires compatible source streams.
+
+Choose mode [1]: 1
+
+Available edits:
+
+  1. 20260913_110412_edit.json
+  2. best-downhill-sections_edit.json
+
+Choose edit: 2
 ```
 
-An existing output is never overwritten implicitly:
-
-```bash
-video-tools render edit.json --overwrite
-```
-
-The output from the example above is written to `exports/final.mp4`.
+The render summary then shows the selected edit and the generated output path,
+for example `exports/20260913_105103_accurate.mp4`. A later render of the same
+edit creates a different timestamped MP4 rather than overwriting the earlier
+export.
 
 ## Accurate mode
 
 Accurate mode is intended when the requested timestamps matter:
 
 ```bash
-video-tools render edit.json --mode accurate
+video-tools render
 ```
 
 The renderer:
@@ -245,7 +257,7 @@ compatibility error rather than being resized or padded automatically.
 Fast mode prioritizes speed and avoids video and audio encoding:
 
 ```bash
-video-tools render edit.json --mode fast
+video-tools render
 ```
 
 The renderer creates a temporary FFmpeg concat-demuxer file containing the
@@ -301,6 +313,9 @@ Output already exists: ... Use --overwrite to replace it.
 ffmpeg was not found on PATH. Make sure FFmpeg is installed.
 ```
 
+Under the interactive CLI workflow, normal renders use a fresh timestamped
+export path, so users are not prompted about overwrite decisions.
+
 The CLI prints expected validation and rendering failures as `ERROR: ...` and
 returns a nonzero exit status. If FFmpeg fails after creating a partial output,
 that incomplete output is removed. Temporary concat files are also removed,
@@ -312,9 +327,10 @@ The feature is integrated with the existing package:
 
 ```text
 src/videotools/
-├── cli.py       # render command and user-facing error handling
+├── cli.py       # command dispatch and user-facing error handling
 ├── project.py   # project discovery, configuration, and configured paths
 ├── edit.py      # immutable timeline model, JSON parsing, and validation
+├── render_cli.py # interactive render selection and output naming
 ├── render.py    # probing, compatibility checks, and FFmpeg execution
 └── media.py     # supported source extensions
 ```

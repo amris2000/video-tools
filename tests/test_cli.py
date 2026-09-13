@@ -52,6 +52,20 @@ exports = "exports"
             run_editor.assert_called_once()
             self.assertEqual(run_editor.call_args.args[0].root, root)
 
+    def test_render_help_describes_interactive_workflow_without_overwrite(self):
+        output = StringIO()
+
+        with patch("sys.argv", ["video-tools", "render", "--help"]):
+            with self.assertRaises(SystemExit):
+                with redirect_stdout(output):
+                    main()
+
+        text = output.getvalue()
+        self.assertIn("Interactively choose a render mode", text)
+        self.assertIn("YYYYMMDD_HHMMSS_accurate.mp4", text)
+        self.assertNotIn("--overwrite", text)
+        self.assertNotIn("--mode", text)
+
 
 
 if __name__ == "__main__":

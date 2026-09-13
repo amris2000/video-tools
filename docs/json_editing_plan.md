@@ -60,8 +60,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 Run it from anywhere inside a video-tools project:
 
 ```bash
-video-tools render edit.json
-video-tools render edit.json --mode fast --overwrite
+video-tools render
 ```
 
 Fast mode will be quick but cuts can be affected by keyframe placement.
@@ -80,18 +79,16 @@ Fast mode will be quick but cuts can be affected by keyframe placement.
 Accurate rendering is now the default:
 
 ```bash
-video-tools render edit.json
-video-tools render edit.json --mode accurate
-video-tools render edit.json --mode fast
+video-tools render
 ```
 
 ## Increment 4: CLI and documentation
 
-1. Add `video-tools render EDIT_FILE` to the existing `argparse` CLI.
-2. Add `--mode {fast,accurate}`, defaulting to `accurate`.
+1. Add `video-tools render` interactive selection to the existing `argparse` CLI.
+2. Prompt for mode and available edit JSON files from `edits/`.
 3. Catch validation and rendering exceptions at the CLI boundary, print a
    concise error to stderr, and return a nonzero exit status.
-4. Add `--overwrite` deliberately; never overwrite an export implicitly.
+4. Generate a fresh timestamped export path for every render instead of overwriting.
 5. Document examples and the fast-versus-accurate trade-off in the README.
 
 ## Later extensions

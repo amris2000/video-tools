@@ -20,4 +20,4 @@ video-tools organize
 video-tools thumbnails
 video-tools probe
 video-tools sample-edit
-video-tools render edits/20260913_092145_edit.json
+video-tools render
