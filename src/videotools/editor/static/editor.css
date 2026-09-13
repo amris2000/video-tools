@@ -389,6 +389,73 @@ button:disabled {
   margin-top: 2px;
 }
 
+.clips-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.clip-group {
+  border: 1px solid rgba(74, 49, 22, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+}
+
+.clip-group-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  font-weight: 700;
+}
+
+.clip-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.clip-group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.clip-inspect-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  border: 1px solid rgba(74, 49, 22, 0.12);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.clip-inspect-row.selected {
+  border-color: rgba(180, 85, 45, 0.6);
+  box-shadow: 0 0 0 3px rgba(180, 85, 45, 0.12);
+}
+
+.clip-inspect-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.clip-inspect-main strong,
+.clip-inspect-main .muted {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.clip-browser-meta {
+  margin-top: 10px;
+}
+
 .empty-state {
   padding: 18px;
   border-radius: 14px;
@@ -554,5 +621,10 @@ dialog::backdrop {
   .field-grid,
   .metrics {
     grid-template-columns: 1fr;
+  }
+
+  .clip-inspect-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

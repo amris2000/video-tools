@@ -23,6 +23,7 @@
       <div class="top-nav" role="tablist" aria-label="Editor views">
         <button id="viewEditButton" type="button" class="nav-tab active" role="tab" aria-selected="true">Edit</button>
         <button id="viewRendersButton" type="button" class="nav-tab" role="tab" aria-selected="false">View renders</button>
+        <button id="viewClipsButton" type="button" class="nav-tab" role="tab" aria-selected="false">Inspect clips</button>
       </div>
     </section>
 
@@ -140,6 +141,30 @@
           <div class="video-wrap">
             <video id="renderVideo" controls preload="metadata"></video>
           </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="clipsView" class="hidden">
+      <section class="panel clips-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Read Only</p>
+            <h2>Clips by Date</h2>
+          </div>
+          <div class="toolbar">
+            <button id="refreshClipsBrowserButton" type="button" class="secondary">Refresh</button>
+          </div>
+        </div>
+
+        <div id="clipsBrowserEmpty" class="empty-state hidden">No clips found in this project.</div>
+        <div id="clipsGroups" class="clips-groups"></div>
+
+        <div id="clipBrowserPlayerWrap" class="render-player-wrap hidden">
+          <div class="video-wrap">
+            <video id="clipBrowserVideo" controls preload="metadata"></video>
+          </div>
+          <p id="clipBrowserMeta" class="muted clip-browser-meta"></p>
         </div>
       </section>
     </div>

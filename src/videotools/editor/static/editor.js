@@ -6,6 +6,7 @@ const state = {
   renderScope: "exports",
   currentView: "edit",
   currentRenderFilename: "",
+  currentClipInspectFile: "",
   clipMap: new Map(),
   currentFilename: "",
   document: { version: 1, output: "", clips: [] },
@@ -22,8 +23,10 @@ const elements = {
   dirtyBadge: document.getElementById("dirtyBadge"),
   viewEditButton: document.getElementById("viewEditButton"),
   viewRendersButton: document.getElementById("viewRendersButton"),
+  viewClipsButton: document.getElementById("viewClipsButton"),
   editView: document.getElementById("editView"),
   rendersView: document.getElementById("rendersView"),
+  clipsView: document.getElementById("clipsView"),
   editSelect: document.getElementById("editSelect"),
   outputInput: document.getElementById("outputInput"),
   saveButton: document.getElementById("saveButton"),
@@ -74,6 +77,12 @@ const elements = {
   rendersList: document.getElementById("rendersList"),
   renderPlayerWrap: document.getElementById("renderPlayerWrap"),
   renderVideo: document.getElementById("renderVideo"),
+  refreshClipsBrowserButton: document.getElementById("refreshClipsBrowserButton"),
+  clipsBrowserEmpty: document.getElementById("clipsBrowserEmpty"),
+  clipsGroups: document.getElementById("clipsGroups"),
+  clipBrowserPlayerWrap: document.getElementById("clipBrowserPlayerWrap"),
+  clipBrowserVideo: document.getElementById("clipBrowserVideo"),
+  clipBrowserMeta: document.getElementById("clipBrowserMeta"),
   toast: document.getElementById("toast"),
 };
 
@@ -306,6 +315,7 @@ function renderAll() {
   renderTimeline();
   renderInspector();
   renderRendersList();
+  renderClipsBrowser();
   elements.outputInput.value = state.document.output || "";
   elements.renameButton.disabled = !state.currentFilename || state.dirty;
   elements.saveAsButton.disabled = !state.currentFilename;
@@ -315,12 +325,132 @@ function renderAll() {
 
 function renderView() {
   const editActive = state.currentView === "edit";
+  const rendersActive = state.currentView === "renders";
+  const clipsActive = state.currentView === "clips";
+
   elements.editView.classList.toggle("hidden", !editActive);
-  elements.rendersView.classList.toggle("hidden", editActive);
+  elements.rendersView.classList.toggle("hidden", !rendersActive);
+  elements.clipsView.classList.toggle("hidden", !clipsActive);
+
   elements.viewEditButton.classList.toggle("active", editActive);
-  elements.viewRendersButton.classList.toggle("active", !editActive);
+  elements.viewRendersButton.classList.toggle("active", rendersActive);
+  elements.viewClipsButton.classList.toggle("active", clipsActive);
+
   elements.viewEditButton.setAttribute("aria-selected", editActive ? "true" : "false");
-  elements.viewRendersButton.setAttribute("aria-selected", editActive ? "false" : "true");
+  elements.viewRendersButton.setAttribute("aria-selected", rendersActive ? "true" : "false");
+  elements.viewClipsButton.setAttribute("aria-selected", clipsActive ? "true" : "false");
+}
+
+function clipDateGroup(clipFile) {
+  const parts = clipFile.split("/");
+  if (parts.length <= 1) {
+    return "ungrouped";
+  }
+  return parts[0] || "ungrouped";
+}
+
+function clipLeafName(clipFile) {
+  const parts = clipFile.split("/");
+  return parts[parts.length - 1] || clipFile;
+}
+
+function renderClipsBrowser() {
+  elements.clipsGroups.innerHTML = "";
+  const hasClips = state.clips.length > 0;
+  elements.clipsBrowserEmpty.classList.toggle("hidden", hasClips);
+
+  if (!hasClips) {
+    state.currentClipInspectFile = "";
+    elements.clipBrowserVideo.removeAttribute("src");
+    elements.clipBrowserVideo.load();
+    elements.clipBrowserPlayerWrap.classList.add("hidden");
+    return;
+  }
+
+  if (!state.currentClipInspectFile || !state.clipMap.has(state.currentClipInspectFile)) {
+    state.currentClipInspectFile = state.clips[0].file;
+  }
+
+  const grouped = new Map();
+  for (const clip of state.clips) {
+    const group = clipDateGroup(clip.file);
+    if (!grouped.has(group)) {
+      grouped.set(group, []);
+    }
+    grouped.get(group).push(clip);
+  }
+
+  const selectedGroup = clipDateGroup(state.currentClipInspectFile);
+  for (const [group, clips] of grouped.entries()) {
+    const section = document.createElement("details");
+    section.className = "clip-group";
+    section.open = group === selectedGroup;
+
+    const summary = document.createElement("summary");
+    summary.className = "clip-group-summary";
+
+    const groupTitle = document.createElement("span");
+    groupTitle.textContent = group;
+    const groupCount = document.createElement("span");
+    groupCount.className = "muted";
+    groupCount.textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"}`;
+
+    summary.append(groupTitle, groupCount);
+    section.append(summary);
+
+    const rows = document.createElement("div");
+    rows.className = "clip-group-rows";
+
+    for (const clip of clips) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "clip-inspect-row";
+      if (clip.file === state.currentClipInspectFile) {
+        button.classList.add("selected");
+      }
+
+      const left = document.createElement("span");
+      left.className = "clip-inspect-main";
+      const right = document.createElement("span");
+      right.className = "clip-inspect-duration muted";
+
+      const leaf = document.createElement("strong");
+      leaf.textContent = clipLeafName(clip.file);
+      const full = document.createElement("span");
+      full.className = "muted";
+      full.textContent = clip.file;
+
+      left.append(leaf, full);
+      right.textContent = clip.duration ? formatSeconds(clip.duration) : "Unknown";
+
+      button.append(left, right);
+      button.addEventListener("click", () => {
+        state.currentClipInspectFile = clip.file;
+        renderClipsBrowser();
+      });
+
+      rows.append(button);
+    }
+
+    section.append(rows);
+    elements.clipsGroups.append(section);
+  }
+
+  const selected = state.clipMap.get(state.currentClipInspectFile);
+  if (!selected) {
+    elements.clipBrowserPlayerWrap.classList.add("hidden");
+    return;
+  }
+
+  if (elements.clipBrowserVideo.dataset.currentFile !== selected.file) {
+    elements.clipBrowserVideo.dataset.currentFile = selected.file;
+    elements.clipBrowserVideo.src = mediaUrl(selected.file);
+    elements.clipBrowserVideo.load();
+  }
+
+  const durationText = selected.duration ? formatSeconds(selected.duration) : "Unknown duration";
+  elements.clipBrowserMeta.textContent = `${selected.file} · ${durationText}`;
+  elements.clipBrowserPlayerWrap.classList.remove("hidden");
 }
 
 function renderRendersList() {
@@ -393,6 +523,16 @@ async function refreshRenders() {
   renderRendersList();
 }
 
+async function refreshClips() {
+  const data = await api("/api/clips");
+  state.clips = data.clips;
+  state.clipMap = new Map(state.clips.map((clip) => [clip.file, clip]));
+  renderClipPicker();
+  renderTimeline();
+  renderInspector();
+  renderClipsBrowser();
+}
+
 async function switchRenderScope(scope) {
   if (state.renderScope === scope) {
     return;
@@ -408,6 +548,8 @@ async function switchView(view) {
 
   if (view === "renders") {
     await refreshRenders();
+  } else if (view === "clips") {
+    renderClipsBrowser();
   }
 }
 
@@ -685,8 +827,14 @@ elements.viewEditButton.addEventListener("click", () => {
 elements.viewRendersButton.addEventListener("click", () => {
   switchView("renders").catch(reportError);
 });
+elements.viewClipsButton.addEventListener("click", () => {
+  switchView("clips").catch(reportError);
+});
 elements.refreshRendersButton.addEventListener("click", () => {
   refreshRenders().catch(reportError);
+});
+elements.refreshClipsBrowserButton.addEventListener("click", () => {
+  refreshClips().catch(reportError);
 });
 elements.exportsScopeButton.addEventListener("click", () => {
   switchRenderScope("exports").catch(reportError);
