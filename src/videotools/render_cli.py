@@ -4,8 +4,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
-from videotools.edit import load_edit_timeline
-from videotools.edit_files import create_render_output_path, list_edit_files
+from videotools.edit import EditValidationError, load_edit_timeline, parse_edit_timeline
+from videotools.edit_files import create_render_output_path, list_edit_files, read_edit_document
 from videotools.project import VideoProject
 from videotools.render import render_accurate, render_fast
 
@@ -135,8 +135,21 @@ def run_render_workflow(
     if edit_file is None:
         return None
 
-    timeline = load_edit_timeline(edit_file, project)
-    output_path = create_render_output_path(project, mode)
+    fallback_output_path: Path | None = None
+    try:
+        timeline = load_edit_timeline(edit_file, project)
+    except EditValidationError as error:
+        if "output must be a non-empty string." not in str(error):
+            raise
+
+        # Support legacy edit files that omitted "output" by assigning a
+        # fresh timestamped filename for this render run.
+        raw_document = read_edit_document(edit_file)
+        fallback_output_path = create_render_output_path(project, mode)
+        raw_document["output"] = fallback_output_path.relative_to(project.exports_dir).as_posix()
+        timeline = parse_edit_timeline(raw_document, project)
+
+    output_path = fallback_output_path or timeline.output
     render_timeline = replace(timeline, output=output_path)
 
     print_render_summary(
