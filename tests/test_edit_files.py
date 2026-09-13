@@ -1,10 +1,19 @@
 from datetime import datetime
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from videotools.edit_files import create_new_edit_file, list_edit_files
+from videotools.edit_files import (
+    create_edit_document,
+    create_empty_edit_document,
+    create_new_edit_file,
+    list_edit_files,
+    output_name_for_edit_filename,
+    save_edit_document,
+    validate_edit_filename,
+)
 from videotools.project import VideoProject
 
 
@@ -68,6 +77,34 @@ exports = "exports"
         (nested_dir / "20260913_111111_edit.json").write_text("{}", encoding="utf-8")
 
         self.assertEqual(list_edit_files(self.project), [newest, oldest])
+
+    def test_validate_edit_filename_rejects_directory_separators(self):
+        with self.assertRaisesRegex(ValueError, "directory separators"):
+            validate_edit_filename("nested/edit.json")
+
+        with self.assertRaisesRegex(ValueError, "directory separators"):
+            validate_edit_filename("nested\\edit.json")
+
+    def test_output_name_for_edit_filename_reuses_edit_stem(self):
+        self.assertEqual(
+            output_name_for_edit_filename("morning-ride_edit.json"),
+            "morning-ride_video.mp4",
+        )
+
+    def test_save_edit_document_replaces_file_contents(self):
+        document = create_empty_edit_document("draft_edit.json", "draft_video.mp4")
+        create_edit_document(self.project, "draft_edit.json", document)
+
+        updated = {
+            "version": 1,
+            "output": "updated_video.mp4",
+            "clips": [],
+        }
+        save_edit_document(self.project, "draft_edit.json", updated)
+
+        text = (self.project.edits_dir / "draft_edit.json").read_text(encoding="utf-8")
+        self.assertTrue(text.endswith("\n"))
+        self.assertEqual(json.loads(text), updated)
 
 
 if __name__ == "__main__":

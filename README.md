@@ -295,7 +295,7 @@ metadata\
 
 ## `edits/`
 
-JSON edit timelines for local rendering and, later, the local web editor.
+JSON edit timelines for local rendering and the local web editor.
 
 Example:
 

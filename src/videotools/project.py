@@ -43,6 +43,15 @@ class VideoProject:
         return path
 
     @property
+    def name(self) -> str:
+        configured = self.config.get("name")
+
+        if isinstance(configured, str) and configured.strip():
+            return configured.strip()
+
+        return self.root.name
+
+    @property
     def clips_dir(self) -> Path:
         return self._configured_path("clips", "clips")
 

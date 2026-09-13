@@ -27,8 +27,6 @@ class CliHelpTests(unittest.TestCase):
         self.assertIn("video-tools journal list", text)
 
     def test_editor_command_requires_project_and_prepares_edits_dir(self):
-        output = StringIO()
-
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "clips").mkdir()
@@ -46,15 +44,14 @@ exports = "exports"
 
             with patch("sys.argv", ["video-tools", "editor"]):
                 with patch("pathlib.Path.cwd", return_value=root):
-                    with patch("webbrowser.open", return_value=True):
-                        with redirect_stdout(output):
+                    with patch("videotools.cli.run_editor_server") as run_editor:
+                        with redirect_stdout(StringIO()):
                             main()
 
             self.assertTrue((root / "edits").is_dir())
+            run_editor.assert_called_once()
+            self.assertEqual(run_editor.call_args.args[0].root, root)
 
-        text = output.getvalue()
-        self.assertIn("Project:", text)
-        self.assertIn("Opening editor:", text)
 
 
 if __name__ == "__main__":

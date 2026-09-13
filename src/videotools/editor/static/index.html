@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Tools Timeline Editor</title>
+  <link rel="stylesheet" href="/static/editor.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="hero panel">
+      <div>
+        <p class="eyebrow">Local Timeline Editor</p>
+        <h1>Video Tools Timeline Editor</h1>
+        <p id="projectLine" class="muted">Loading project…</p>
+      </div>
+      <div class="hero-actions">
+        <span id="dirtyBadge" class="badge">Saved</span>
+      </div>
+    </header>
+
+    <section class="panel topbar">
+      <div class="field grow">
+        <label for="editSelect">Edit</label>
+        <select id="editSelect"></select>
+      </div>
+      <div class="toolbar">
+        <button id="newButton" type="button">New</button>
+        <button id="renameButton" type="button" class="secondary">Rename</button>
+        <button id="saveAsButton" type="button" class="secondary">Save As</button>
+        <button id="deleteButton" type="button" class="danger">Delete</button>
+      </div>
+    </section>
+
+    <section class="panel output-row">
+      <div class="field grow">
+        <label for="outputInput">Output</label>
+        <input id="outputInput" type="text" placeholder="20260913_101500_video.mp4" />
+      </div>
+      <button id="saveButton" type="button" class="accent">Save</button>
+    </section>
+
+    <section class="panel timeline-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Timeline</p>
+          <h2>Current Clips</h2>
+        </div>
+        <button id="addClipButton" type="button">+ Add Clip</button>
+      </div>
+      <div id="timelineEmpty" class="empty-state hidden">No clips yet. Add one from the project clips list.</div>
+      <div id="timelineList" class="timeline-list"></div>
+      <div id="inspectorAnchor">
+        <section id="inspectorPanel" class="panel inspector-panel hidden">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Inspector</p>
+              <h2>Selected Clip</h2>
+            </div>
+          </div>
+
+          <div id="inspectorEmpty" class="empty-state">Select a timeline clip to preview and trim it.</div>
+
+          <div id="inspectorContent" class="inspector hidden">
+            <div class="video-wrap">
+              <video id="previewVideo" controls preload="metadata"></video>
+            </div>
+
+            <div class="metrics">
+              <div class="metric"><span>Source</span><strong id="sourceDuration">-</strong></div>
+              <div class="metric"><span>Position</span><strong id="currentPosition">-</strong></div>
+              <div class="metric"><span>Selection</span><strong id="selectedDuration">-</strong></div>
+            </div>
+
+            <div class="trim-control">
+              <label>Trim Range</label>
+              <div class="ranges">
+                <input id="startRange" type="range" min="0" max="0" step="0.001" value="0" />
+                <input id="endRange" type="range" min="0" max="0" step="0.001" value="0" />
+              </div>
+            </div>
+
+            <div class="field-grid">
+              <div class="field">
+                <label for="startInput">Start</label>
+                <input id="startInput" type="number" min="0" step="0.001" />
+              </div>
+              <div class="field">
+                <label for="endInput">End</label>
+                <input id="endInput" type="number" min="0" step="0.001" />
+              </div>
+            </div>
+
+            <div class="toolbar compact">
+              <button id="setStartButton" type="button" class="secondary">Set Start</button>
+              <button id="setEndButton" type="button" class="secondary">Set End</button>
+              <button id="playSelectionButton" type="button">Play Selection</button>
+            </div>
+
+            <div class="field">
+              <label for="labelInput">Label</label>
+              <input id="labelInput" type="text" placeholder="Optional label" />
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <dialog id="editDialog">
+    <form method="dialog" id="editDialogForm" class="dialog-form">
+      <h3 id="editDialogTitle">New Edit</h3>
+      <div class="field">
+        <label for="dialogFilename">Edit filename</label>
+        <input id="dialogFilename" type="text" required />
+      </div>
+      <div class="field">
+        <label for="dialogOutput">Output filename</label>
+        <input id="dialogOutput" type="text" required />
+      </div>
+      <p id="editDialogMessage" class="muted"></p>
+      <div class="dialog-actions">
+        <button type="button" id="dialogCancelButton" class="secondary">Cancel</button>
+        <button type="submit" id="dialogSubmitButton" class="accent">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="renameDialog">
+    <form method="dialog" id="renameDialogForm" class="dialog-form">
+      <h3>Rename Edit</h3>
+      <div class="field">
+        <label for="renameFilename">New filename</label>
+        <input id="renameFilename" type="text" required />
+      </div>
+      <p class="muted">Renaming changes only the JSON filename. It does not modify the output field inside the document.</p>
+      <div class="dialog-actions">
+        <button type="button" id="renameCancelButton" class="secondary">Cancel</button>
+        <button type="submit" class="accent">Rename</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="clipDialog">
+    <form method="dialog" id="clipDialogForm" class="dialog-form wide">
+      <h3>Add Clip</h3>
+      <div class="field">
+        <label for="clipSearchInput">Filter clips</label>
+        <input id="clipSearchInput" type="text" placeholder="Type to filter clips" />
+      </div>
+      <div id="clipList" class="clip-picker"></div>
+      <div class="dialog-actions">
+        <button type="button" id="clipCancelButton" class="secondary">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/static/editor.js" defer></script>
+</body>
+</html>

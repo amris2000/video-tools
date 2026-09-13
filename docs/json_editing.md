@@ -1,8 +1,8 @@
 # JSON Video Editing
 
 `video-tools` can render a sequence of selected ranges from source videos into
-one MP4 file. The edit is described in JSON, so no graphical editor or project
-database is required.
+one MP4 file. The edit is described in JSON, so no project database is
+required, and the local web editor works directly with those JSON files.
 
 The implementation deliberately supports one ordered track of video clips. It
 does not yet implement transitions, effects, titles, music, multiple tracks,

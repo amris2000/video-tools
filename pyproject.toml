@@ -17,3 +17,6 @@ video-tools = "videotools.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"videotools.editor" = ["static/*.html", "static/*.css", "static/*.js"]

@@ -2,11 +2,9 @@ import argparse
 from pathlib import Path
 import sys
 
-import webbrowser
-from importlib.resources import files
-
 from videotools.edit import EditValidationError, load_edit_timeline
 from videotools.edit_files import ensure_edits_dir
+from videotools.editor import run_editor_server
 from videotools.init_project import create_project
 from videotools.metadata import analyze_project
 from videotools.project import VideoProject, find_project_root
@@ -177,22 +175,7 @@ def main():
     elif args.command == "editor":
         project = VideoProject.load(project_root)
         ensure_edits_dir(project)
-        editor_file = files("videotools").joinpath(
-            "editor",
-            "index.html",
-        )
-
-        url = editor_file.as_uri()
-
-        print(f"Project: {project.root}")
-        print(f"Opening editor: {url}")
-
-        if not webbrowser.open(url):
-            print(
-                "Could not automatically open a browser.",
-                file=sys.stderr,
-            )
-            print(f"Open this manually: {url}")
+        run_editor_server(project)
 
     elif args.command == "probe":
         analyze_project(
