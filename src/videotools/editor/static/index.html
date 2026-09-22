@@ -89,9 +89,25 @@
           <div>
             <p class="eyebrow">Timeline</p>
             <h2>Current Clips</h2>
+            <p id="timelineDuration" class="timeline-duration muted">Total length: 00:00.000</p>
           </div>
           <button id="addClipButton" type="button">+ Add Clip</button>
         </div>
+        <div class="timeline-preview-toolbar">
+          <button id="previewTimelineButton" type="button" class="accent">Preview Timeline</button>
+          <span id="timelinePreviewStatus" class="muted">Preview the current edit without rendering.</span>
+        </div>
+
+        <div id="timelinePreviewWrap" class="timeline-preview-wrap hidden">
+          <div class="video-wrap">
+            <video id="timelinePreviewVideo" controls preload="metadata"></video>
+          </div>
+          <div class="timeline-preview-meta">
+            <strong id="timelinePreviewClip">-</strong>
+            <span id="timelinePreviewProgress" class="muted">-</span>
+          </div>
+        </div>
+
         <div id="timelineEmpty" class="empty-state hidden">No clips yet. Add one from the project clips list.</div>
         <div id="timelineList" class="timeline-list"></div>
         <div id="inspectorAnchor">

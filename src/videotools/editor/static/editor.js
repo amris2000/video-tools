@@ -18,6 +18,8 @@ const state = {
   activeDialogMode: "new",
   dialogOutputTouched: false,
   playbackStopAt: null,
+  timelinePreviewActive: false,
+  timelinePreviewIndex: -1,
 };
 
 const elements = {
@@ -38,7 +40,17 @@ const elements = {
   saveAsButton: document.getElementById("saveAsButton"),
   deleteButton: document.getElementById("deleteButton"),
   addClipButton: document.getElementById("addClipButton"),
+
+  // Timeline preview
+  previewTimelineButton: document.getElementById("previewTimelineButton"),
+  timelinePreviewWrap: document.getElementById("timelinePreviewWrap"),
+  timelinePreviewVideo: document.getElementById("timelinePreviewVideo"),
+  timelinePreviewStatus: document.getElementById("timelinePreviewStatus"),
+  timelinePreviewClip: document.getElementById("timelinePreviewClip"),
+  timelinePreviewProgress: document.getElementById("timelinePreviewProgress"),
+
   timelineList: document.getElementById("timelineList"),
+  timelineDuration: document.getElementById("timelineDuration"),
   timelineEmpty: document.getElementById("timelineEmpty"),
   inspectorAnchor: document.getElementById("inspectorAnchor"),
   inspectorPanel: document.getElementById("inspectorPanel"),
@@ -100,7 +112,10 @@ const elements = {
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
     ...options,
   });
 
@@ -109,8 +124,11 @@ async function api(path, options = {}) {
   }
 
   const data = await response.json();
+
   if (!response.ok) {
-    throw new Error(data.error || `Request failed with status ${response.status}`);
+    throw new Error(
+      data.error || `Request failed with status ${response.status}`
+    );
   }
 
   return data;
@@ -138,9 +156,15 @@ function cloneCurrentDocument() {
 function updateDirtyState() {
   const snapshot = JSON.stringify(state.document);
   state.dirty = snapshot !== state.savedSnapshot;
-  elements.dirtyBadge.textContent = state.dirty ? "Unsaved changes" : "Saved";
+
+  elements.dirtyBadge.textContent = state.dirty
+    ? "Unsaved changes"
+    : "Saved";
+
   elements.dirtyBadge.classList.toggle("dirty", state.dirty);
-  elements.saveButton.disabled = !state.currentFilename || !state.dirty;
+
+  elements.saveButton.disabled =
+    !state.currentFilename || !state.dirty;
 }
 
 function markSaved(documentValue) {
@@ -154,46 +178,87 @@ function deriveSuggestedOutput(filename) {
   if (!filename.endsWith(".json")) {
     return "video.mp4";
   }
+
   const stem = filename.slice(0, -5);
-  const base = stem.endsWith("_edit") ? stem.slice(0, -5) : stem;
+  const base = stem.endsWith("_edit")
+    ? stem.slice(0, -5)
+    : stem;
+
   return `${base}_video.mp4`;
 }
 
 function formatSeconds(value) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(value)
+  ) {
     return "-";
   }
+
   return `${Number(value).toFixed(3)} s`;
 }
 
+function formatTimelineDuration(value) {
+  const totalMilliseconds = Math.max(0, Math.round(Number(value) * 1000));
+  const milliseconds = totalMilliseconds % 1000;
+  const totalSeconds = Math.floor(totalMilliseconds / 1000);
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+
+  const time = hours > 0
+    ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(totalMinutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+  return `${time}.${String(milliseconds).padStart(3, "0")}`;
+}
+
+
 function mediaUrl(relativePath) {
-  return `/media/${relativePath.split("/").map(encodeURIComponent).join("/")}`;
+  return `/media/${relativePath
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/")}`;
 }
 
 function renderUrl(filename) {
-  const base = state.renderScope === "social" ? "/social-renders" : "/renders";
+  const base =
+    state.renderScope === "social"
+      ? "/social-renders"
+      : "/renders";
+
   return `${base}/${encodeURIComponent(filename)}`;
 }
 
 function showToast(message) {
   elements.toast.textContent = message;
   elements.toast.classList.remove("hidden");
+
   window.clearTimeout(showToast.timeoutId);
+
   showToast.timeoutId = window.setTimeout(() => {
     elements.toast.classList.add("hidden");
   }, 2800);
 }
 
 function currentClip() {
-  if (state.selectedIndex < 0 || state.selectedIndex >= state.document.clips.length) {
+  if (
+    state.selectedIndex < 0 ||
+    state.selectedIndex >= state.document.clips.length
+  ) {
     return null;
   }
+
   return state.document.clips[state.selectedIndex];
 }
 
 function selectedClipInfo() {
   const clip = currentClip();
-  return clip ? state.clipMap.get(clip.file) || null : null;
+  return clip
+    ? state.clipMap.get(clip.file) || null
+    : null;
 }
 
 function renderEditSelector() {
@@ -203,6 +268,7 @@ function renderEditSelector() {
     const option = document.createElement("option");
     option.value = "";
     option.textContent = "No edits yet";
+
     elements.editSelect.append(option);
     elements.editSelect.disabled = true;
     return;
@@ -212,26 +278,46 @@ function renderEditSelector() {
 
   for (const edit of state.edits) {
     const option = document.createElement("option");
+
     option.value = edit.filename;
     option.textContent = edit.filename;
-    option.selected = edit.filename === state.currentFilename;
+    option.selected =
+      edit.filename === state.currentFilename;
+
     elements.editSelect.append(option);
   }
 }
 
 function renderTimeline() {
+  
+  const totalDuration = state.document.clips.reduce(
+  (total, clip) => total + Math.max(0, clip.end - clip.start),
+  0
+);
+
+elements.timelineDuration.textContent =
+  `Total length: ${formatTimelineDuration(totalDuration)}`;
+  
   elements.timelineList.innerHTML = "";
-  elements.timelineEmpty.classList.toggle("hidden", state.document.clips.length > 0);
+
+
+
+  elements.timelineEmpty.classList.toggle(
+    "hidden",
+    state.document.clips.length > 0
+  );
 
   state.document.clips.forEach((clip, index) => {
     const wrapper = document.createElement("div");
     wrapper.className = "timeline-item";
+
     if (index === state.selectedIndex) {
       wrapper.classList.add("selected");
     }
 
     const info = state.clipMap.get(clip.file);
     const duration = clip.end - clip.start;
+
     const thumbnailHtml = info?.thumbnail_url
       ? `<img class="clip-thumb" src="${info.thumbnail_url}" alt="Thumbnail for ${clip.file}" loading="lazy" />`
       : `<div class="clip-thumb clip-thumb-placeholder" aria-hidden="true"></div>`;
@@ -241,11 +327,40 @@ function renderTimeline() {
         <div class="timeline-col timeline-col-main">
           <div class="clip-index">${index + 1}</div>
           <div class="clip-file">${clip.file}</div>
-          <div class="clip-range">${formatSeconds(clip.start)} -> ${formatSeconds(clip.end)}</div>
+          <div class="clip-range">
+            ${formatSeconds(clip.start)}
+            ->
+            ${formatSeconds(clip.end)}
+          </div>
+
           <div class="timeline-actions">
-            <button type="button" data-action="up" ${index === 0 ? "disabled" : ""}>Move Up</button>
-            <button type="button" data-action="down" ${index === state.document.clips.length - 1 ? "disabled" : ""}>Move Down</button>
-            <button type="button" data-action="remove" class="danger">Remove</button>
+            <button
+              type="button"
+              data-action="up"
+              ${index === 0 ? "disabled" : ""}
+            >
+              Move Up
+            </button>
+
+            <button
+              type="button"
+              data-action="down"
+              ${
+                index === state.document.clips.length - 1
+                  ? "disabled"
+                  : ""
+              }
+            >
+              Move Down
+            </button>
+
+            <button
+              type="button"
+              data-action="remove"
+              class="danger"
+            >
+              Remove
+            </button>
           </div>
         </div>
 
@@ -254,24 +369,49 @@ function renderTimeline() {
         </div>
 
         <div class="timeline-col timeline-col-details">
-          <div class="timeline-detail">Duration ${formatSeconds(duration)}</div>
-          <div class="timeline-detail clip-label-detail">${clip.label || "No label"}</div>
-          <div class="timeline-detail">${info?.duration ? `Source ${formatSeconds(info.duration)}` : "Source duration unavailable"}</div>
+          <div class="timeline-detail">
+            Duration ${formatSeconds(duration)}
+          </div>
+
+          <div class="timeline-detail clip-label-detail">
+            ${clip.label || "No label"}
+          </div>
+
+          <div class="timeline-detail">
+            ${
+              info?.duration
+                ? `Source ${formatSeconds(info.duration)}`
+                : "Source duration unavailable"
+            }
+          </div>
         </div>
 
         <div class="timeline-col timeline-col-inspect">
-          <button type="button" data-action="select">Inspect</button>
+          <button type="button" data-action="select">
+            Inspect
+          </button>
         </div>
       </div>
     `;
 
-    wrapper.querySelectorAll("button[data-action]").forEach((button) => {
-      button.addEventListener("click", () => handleTimelineAction(index, button.dataset.action));
-    });
+    wrapper
+      .querySelectorAll("button[data-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () =>
+          handleTimelineAction(
+            index,
+            button.dataset.action
+          )
+        );
+      });
 
     if (index === state.selectedIndex) {
-      const inspectorSlot = document.createElement("div");
-      inspectorSlot.className = "selected-inspector-slot";
+      const inspectorSlot =
+        document.createElement("div");
+
+      inspectorSlot.className =
+        "selected-inspector-slot";
+
       inspectorSlot.append(elements.inspectorPanel);
       wrapper.append(inspectorSlot);
     }
@@ -279,19 +419,38 @@ function renderTimeline() {
     elements.timelineList.append(wrapper);
   });
 
-  if (state.selectedIndex < 0 || state.selectedIndex >= state.document.clips.length) {
-    elements.inspectorAnchor.append(elements.inspectorPanel);
+  if (
+    state.selectedIndex < 0 ||
+    state.selectedIndex >= state.document.clips.length
+  ) {
+    elements.inspectorAnchor.append(
+      elements.inspectorPanel
+    );
   }
 }
 
 function renderInspector() {
   const clip = currentClip();
   const clipInfo = selectedClipInfo();
-  const hasSelection = Boolean(clip && clipInfo);
 
-  elements.inspectorPanel.classList.toggle("hidden", !hasSelection);
-  elements.inspectorEmpty.classList.toggle("hidden", hasSelection);
-  elements.inspectorContent.classList.toggle("hidden", !hasSelection);
+  const hasSelection = Boolean(
+    clip && clipInfo
+  );
+
+  elements.inspectorPanel.classList.toggle(
+    "hidden",
+    !hasSelection
+  );
+
+  elements.inspectorEmpty.classList.toggle(
+    "hidden",
+    hasSelection
+  );
+
+  elements.inspectorContent.classList.toggle(
+    "hidden",
+    !hasSelection
+  );
 
   if (!clip || !clipInfo) {
     elements.previewVideo.removeAttribute("src");
@@ -299,26 +458,218 @@ function renderInspector() {
     return;
   }
 
-  if (!elements.previewVideo.dataset.currentFile || elements.previewVideo.dataset.currentFile !== clip.file) {
-    elements.previewVideo.dataset.currentFile = clip.file;
-    elements.previewVideo.src = mediaUrl(clip.file);
+  if (
+    !elements.previewVideo.dataset.currentFile ||
+    elements.previewVideo.dataset.currentFile !== clip.file
+  ) {
+    elements.previewVideo.dataset.currentFile =
+      clip.file;
+
+    elements.previewVideo.src =
+      mediaUrl(clip.file);
+
     elements.previewVideo.load();
   }
 
-  const maxDuration = clipInfo.duration || clip.end;
-  elements.sourceDuration.textContent = formatSeconds(clipInfo.duration);
-  elements.selectedDuration.textContent = formatSeconds(clip.end - clip.start);
-  elements.currentPosition.textContent = formatSeconds(elements.previewVideo.currentTime);
+  const maxDuration =
+    clipInfo.duration || clip.end;
 
-  elements.startRange.max = String(maxDuration);
-  elements.endRange.max = String(maxDuration);
-  elements.startRange.value = String(clip.start);
-  elements.endRange.value = String(clip.end);
-  elements.startInput.max = String(maxDuration);
-  elements.endInput.max = String(maxDuration);
-  elements.startInput.value = String(clip.start);
-  elements.endInput.value = String(clip.end);
-  elements.labelInput.value = clip.label || "";
+  elements.sourceDuration.textContent =
+    formatSeconds(clipInfo.duration);
+
+  elements.selectedDuration.textContent =
+    formatSeconds(clip.end - clip.start);
+
+  elements.currentPosition.textContent =
+    formatSeconds(
+      elements.previewVideo.currentTime
+    );
+
+  elements.startRange.max =
+    String(maxDuration);
+
+  elements.endRange.max =
+    String(maxDuration);
+
+  elements.startRange.value =
+    String(clip.start);
+
+  elements.endRange.value =
+    String(clip.end);
+
+  elements.startInput.max =
+    String(maxDuration);
+
+  elements.endInput.max =
+    String(maxDuration);
+
+  elements.startInput.value =
+    String(clip.start);
+
+  elements.endInput.value =
+    String(clip.end);
+
+  elements.labelInput.value =
+    clip.label || "";
+}
+
+/*
+ * Whole-timeline preview
+ *
+ * This does not render anything.
+ *
+ * The browser plays each source file directly, seeks to
+ * the timeline start position, stops at the timeline end
+ * position, and then loads the next clip.
+ */
+
+function stopTimelinePreview({ hide = false } = {}) {
+  state.timelinePreviewActive = false;
+  state.timelinePreviewIndex = -1;
+
+  elements.timelinePreviewVideo.pause();
+  elements.timelinePreviewVideo.removeAttribute("src");
+
+  delete elements.timelinePreviewVideo.dataset.currentFile;
+
+  elements.timelinePreviewVideo.load();
+
+  elements.previewTimelineButton.textContent =
+    "Preview Timeline";
+
+  elements.timelinePreviewStatus.textContent =
+    "Preview the current edit without rendering.";
+
+  elements.timelinePreviewClip.textContent = "-";
+  elements.timelinePreviewProgress.textContent = "-";
+
+  if (hide) {
+    elements.timelinePreviewWrap.classList.add(
+      "hidden"
+    );
+  }
+}
+
+function loadTimelinePreviewClip(
+  index,
+  { autoplay = true } = {}
+) {
+  if (!state.timelinePreviewActive) {
+    return;
+  }
+
+  if (
+    index < 0 ||
+    index >= state.document.clips.length
+  ) {
+    stopTimelinePreview();
+
+    elements.timelinePreviewStatus.textContent =
+      "Preview finished.";
+
+    return;
+  }
+
+  const clip = state.document.clips[index];
+  const video = elements.timelinePreviewVideo;
+
+  state.timelinePreviewIndex = index;
+
+  elements.timelinePreviewClip.textContent =
+    clip.label || clip.file;
+
+  elements.timelinePreviewProgress.textContent =
+    `Clip ${index + 1} of ${state.document.clips.length} · ` +
+    `${formatSeconds(clip.start)} → ${formatSeconds(clip.end)}`;
+
+  elements.timelinePreviewStatus.textContent =
+    "Playing timeline preview…";
+
+  const seekAndPlay = async () => {
+    if (
+      !state.timelinePreviewActive ||
+      state.timelinePreviewIndex !== index
+    ) {
+      return;
+    }
+
+    video.currentTime = clip.start;
+
+    if (autoplay) {
+      try {
+        await video.play();
+      } catch (error) {
+        console.warn(
+          "Timeline preview autoplay was blocked.",
+          error
+        );
+
+        elements.timelinePreviewStatus.textContent =
+          "Preview paused by the browser. Press Play to continue.";
+      }
+    }
+  };
+
+  /*
+   * A timeline is allowed to use the same source file
+   * multiple times. If it is already loaded we can seek
+   * immediately rather than downloading its metadata again.
+   */
+  if (
+    video.dataset.currentFile === clip.file &&
+    video.readyState >= 1
+  ) {
+    seekAndPlay();
+    return;
+  }
+
+  video.dataset.currentFile = clip.file;
+  video.src = mediaUrl(clip.file);
+  video.load();
+
+  video.addEventListener(
+    "loadedmetadata",
+    seekAndPlay,
+    { once: true }
+  );
+}
+
+function startTimelinePreview() {
+  if (!state.document.clips.length) {
+    showToast(
+      "Add at least one clip before previewing the timeline."
+    );
+    return;
+  }
+
+  /*
+   * Clicking the button while previewing acts as Stop.
+   */
+  if (state.timelinePreviewActive) {
+    stopTimelinePreview({ hide: true });
+    return;
+  }
+
+  state.timelinePreviewActive = true;
+
+  elements.timelinePreviewWrap.classList.remove(
+    "hidden"
+  );
+
+  elements.previewTimelineButton.textContent =
+    "Stop Preview";
+
+  loadTimelinePreviewClip(0);
+}
+
+function advanceTimelinePreview() {
+  if (!state.timelinePreviewActive) {
+    return;
+  }
+
+  loadTimelinePreviewClip(
+    state.timelinePreviewIndex + 1
+  );
 }
 
 function renderAll() {
@@ -329,97 +680,211 @@ function renderAll() {
   renderInspector();
   renderRendersList();
   renderClipsBrowser();
-  elements.outputInput.value = state.document.output || "";
-  elements.renameButton.disabled = !state.currentFilename || state.dirty;
-  elements.saveAsButton.disabled = !state.currentFilename;
-  elements.deleteButton.disabled = !state.currentFilename;
+
+  elements.outputInput.value =
+    state.document.output || "";
+
+  elements.renameButton.disabled =
+    !state.currentFilename || state.dirty;
+
+  elements.saveAsButton.disabled =
+    !state.currentFilename;
+
+  elements.deleteButton.disabled =
+    !state.currentFilename;
+
+  elements.previewTimelineButton.disabled =
+    state.document.clips.length === 0;
+
   updateDirtyState();
 }
 
 function renderView() {
-  const editActive = state.currentView === "edit";
-  const rendersActive = state.currentView === "renders";
-  const clipsActive = state.currentView === "clips";
-  const newEditActive = state.currentView === "new-edit";
+  const editActive =
+    state.currentView === "edit";
 
-  elements.newEditView.classList.toggle("hidden", !newEditActive);
-  elements.editView.classList.toggle("hidden", !editActive);
-  elements.rendersView.classList.toggle("hidden", !rendersActive);
-  elements.clipsView.classList.toggle("hidden", !clipsActive);
+  const rendersActive =
+    state.currentView === "renders";
 
-  elements.viewEditButton.classList.toggle("active", editActive);
-  elements.viewRendersButton.classList.toggle("active", rendersActive);
-  elements.viewClipsButton.classList.toggle("active", clipsActive);
+  const clipsActive =
+    state.currentView === "clips";
 
-  elements.viewEditButton.setAttribute("aria-selected", editActive ? "true" : "false");
-  elements.viewRendersButton.setAttribute("aria-selected", rendersActive ? "true" : "false");
-  elements.viewClipsButton.setAttribute("aria-selected", clipsActive ? "true" : "false");
+  const newEditActive =
+    state.currentView === "new-edit";
+
+  elements.newEditView.classList.toggle(
+    "hidden",
+    !newEditActive
+  );
+
+  elements.editView.classList.toggle(
+    "hidden",
+    !editActive
+  );
+
+  elements.rendersView.classList.toggle(
+    "hidden",
+    !rendersActive
+  );
+
+  elements.clipsView.classList.toggle(
+    "hidden",
+    !clipsActive
+  );
+
+  elements.viewEditButton.classList.toggle(
+    "active",
+    editActive
+  );
+
+  elements.viewRendersButton.classList.toggle(
+    "active",
+    rendersActive
+  );
+
+  elements.viewClipsButton.classList.toggle(
+    "active",
+    clipsActive
+  );
+
+  elements.viewEditButton.setAttribute(
+    "aria-selected",
+    editActive ? "true" : "false"
+  );
+
+  elements.viewRendersButton.setAttribute(
+    "aria-selected",
+    rendersActive ? "true" : "false"
+  );
+
+  elements.viewClipsButton.setAttribute(
+    "aria-selected",
+    clipsActive ? "true" : "false"
+  );
 }
 
 function buildDefaultWindow(duration) {
   const clipDuration = Number(duration);
-  if (!Number.isFinite(clipDuration) || clipDuration <= 0) {
-    return { start: 0, end: 2 };
+
+  if (
+    !Number.isFinite(clipDuration) ||
+    clipDuration <= 0
+  ) {
+    return {
+      start: 0,
+      end: 2,
+    };
   }
 
-  const windowLength = Math.min(2, clipDuration);
-  const start = clipDuration > windowLength ? (clipDuration - windowLength) / 2 : 0;
+  const windowLength =
+    Math.min(2, clipDuration);
+
+  const start =
+    clipDuration > windowLength
+      ? (clipDuration - windowLength) / 2
+      : 0;
+
   return {
     start: Number(start.toFixed(3)),
-    end: Number((start + windowLength).toFixed(3)),
+    end: Number(
+      (start + windowLength).toFixed(3)
+    ),
   };
 }
 
 function renderNewEditBuilder() {
   const clips = state.clips;
-  const selectedCount = clips.filter((clip) => state.newEditSelectedFiles.has(clip.file)).length;
+
+  const selectedCount = clips.filter((clip) =>
+    state.newEditSelectedFiles.has(clip.file)
+  ).length;
+
   const hasClips = clips.length > 0;
 
-  elements.newEditBuilderEmpty.classList.toggle("hidden", hasClips);
-  elements.newEditClipGrid.innerHTML = "";
-  elements.newEditSelectionCount.textContent = `${selectedCount} of ${clips.length} clips selected`;
+  elements.newEditBuilderEmpty.classList.toggle(
+    "hidden",
+    hasClips
+  );
 
-  elements.newEditCreateButton.disabled = !hasClips || selectedCount === 0;
-  elements.newEditSelectAllButton.disabled = !hasClips;
-  elements.newEditSelectNoneButton.disabled = !hasClips;
+  elements.newEditClipGrid.innerHTML = "";
+
+  elements.newEditSelectionCount.textContent =
+    `${selectedCount} of ${clips.length} clips selected`;
+
+  elements.newEditCreateButton.disabled =
+    !hasClips || selectedCount === 0;
+
+  elements.newEditSelectAllButton.disabled =
+    !hasClips;
+
+  elements.newEditSelectNoneButton.disabled =
+    !hasClips;
 
   if (!hasClips) {
     return;
   }
 
   for (const clip of clips) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "new-edit-clip-card";
+    const card =
+      document.createElement("button");
 
-    const isSelected = state.newEditSelectedFiles.has(clip.file);
+    card.type = "button";
+    card.className =
+      "new-edit-clip-card";
+
+    const isSelected =
+      state.newEditSelectedFiles.has(clip.file);
+
     if (isSelected) {
       card.classList.add("selected");
     }
 
-    const thumbWrap = document.createElement("div");
-    thumbWrap.className = "new-edit-thumb-wrap";
+    const thumbWrap =
+      document.createElement("div");
+
+    thumbWrap.className =
+      "new-edit-thumb-wrap";
 
     if (clip.thumbnail_url) {
-      const thumb = document.createElement("img");
+      const thumb =
+        document.createElement("img");
+
       thumb.className = "clip-thumb";
       thumb.loading = "lazy";
-      thumb.alt = `Thumbnail for ${clip.file}`;
+      thumb.alt =
+        `Thumbnail for ${clip.file}`;
       thumb.src = clip.thumbnail_url;
+
       thumbWrap.append(thumb);
     } else {
-      const placeholder = document.createElement("div");
-      placeholder.className = "clip-thumb clip-thumb-placeholder";
-      placeholder.setAttribute("aria-hidden", "true");
+      const placeholder =
+        document.createElement("div");
+
+      placeholder.className =
+        "clip-thumb clip-thumb-placeholder";
+
+      placeholder.setAttribute(
+        "aria-hidden",
+        "true"
+      );
+
       thumbWrap.append(placeholder);
     }
 
-    const details = document.createElement("span");
-    details.className = "new-edit-clip-card-details";
+    const details =
+      document.createElement("span");
 
-    const name = document.createElement("strong");
+    details.className =
+      "new-edit-clip-card-details";
+
+    const name =
+      document.createElement("strong");
+
     name.textContent = clip.name;
-    const relative = document.createElement("span");
+
+    const relative =
+      document.createElement("span");
+
     relative.className = "muted";
     relative.textContent = clip.file;
 
@@ -427,11 +892,20 @@ function renderNewEditBuilder() {
     card.append(thumbWrap, details);
 
     card.addEventListener("click", () => {
-      if (state.newEditSelectedFiles.has(clip.file)) {
-        state.newEditSelectedFiles.delete(clip.file);
+      if (
+        state.newEditSelectedFiles.has(
+          clip.file
+        )
+      ) {
+        state.newEditSelectedFiles.delete(
+          clip.file
+        );
       } else {
-        state.newEditSelectedFiles.add(clip.file);
+        state.newEditSelectedFiles.add(
+          clip.file
+        );
       }
+
       renderNewEditBuilder();
     });
 
@@ -441,28 +915,50 @@ function renderNewEditBuilder() {
 
 async function openNewEditBuilder() {
   if (state.dirty) {
-    const confirmed = window.confirm("Discard unsaved changes and create a new edit?");
+    const confirmed = window.confirm(
+      "Discard unsaved changes and create a new edit?"
+    );
+
     if (!confirmed) {
       return;
     }
   }
 
-  const defaults = await api("/api/edits/defaults");
+  const defaults =
+    await api("/api/edits/defaults");
+
   state.newEditOutputTouched = false;
-  state.newEditSelectedFiles = new Set(state.clips.map((clip) => clip.file));
-  elements.newEditFilenameInput.value = defaults.filename;
-  elements.newEditOutputInput.value = defaults.output;
+
+  state.newEditSelectedFiles =
+    new Set(
+      state.clips.map((clip) => clip.file)
+    );
+
+  elements.newEditFilenameInput.value =
+    defaults.filename;
+
+  elements.newEditOutputInput.value =
+    defaults.output;
 
   state.currentView = "new-edit";
+
   renderView();
   renderNewEditBuilder();
 }
 
 async function createNewEditFromSelection() {
-  const filename = elements.newEditFilenameInput.value.trim();
-  const output = elements.newEditOutputInput.value.trim() || deriveSuggestedOutput(filename);
+  const filename =
+    elements.newEditFilenameInput.value.trim();
 
-  const selectedClips = state.clips.filter((clip) => state.newEditSelectedFiles.has(clip.file));
+  const output =
+    elements.newEditOutputInput.value.trim() ||
+    deriveSuggestedOutput(filename);
+
+  const selectedClips =
+    state.clips.filter((clip) =>
+      state.newEditSelectedFiles.has(clip.file)
+    );
+
   if (!selectedClips.length) {
     showToast("Select at least one clip.");
     return;
@@ -472,7 +968,9 @@ async function createNewEditFromSelection() {
     version: 1,
     output,
     clips: selectedClips.map((clip) => {
-      const windowValue = buildDefaultWindow(clip.duration);
+      const windowValue =
+        buildDefaultWindow(clip.duration);
+
       return {
         file: clip.file,
         start: windowValue.start,
@@ -484,216 +982,438 @@ async function createNewEditFromSelection() {
 
   await api("/api/edits", {
     method: "POST",
-    body: JSON.stringify({ filename, output }),
+    body: JSON.stringify({
+      filename,
+      output,
+    }),
   });
 
-  const saved = await api(`/api/edits/${encodeURIComponent(filename)}`, {
-    method: "PUT",
-    body: JSON.stringify({ document: documentValue }),
-  });
+  const saved = await api(
+    `/api/edits/${encodeURIComponent(filename)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        document: documentValue,
+      }),
+    }
+  );
 
   await refreshEdits();
+
   state.currentFilename = saved.filename;
-  state.selectedIndex = documentValue.clips.length ? 0 : -1;
+
+  state.selectedIndex =
+    documentValue.clips.length ? 0 : -1;
+
   markSaved(saved.document);
+
   state.currentView = "edit";
+
   renderView();
+
   showToast(`Created ${saved.filename}`);
 }
 
 function clipDateGroup(clipFile) {
   const parts = clipFile.split("/");
+
   if (parts.length <= 1) {
     return "ungrouped";
   }
+
   return parts[0] || "ungrouped";
 }
 
 function clipLeafName(clipFile) {
   const parts = clipFile.split("/");
-  return parts[parts.length - 1] || clipFile;
+
+  return (
+    parts[parts.length - 1] ||
+    clipFile
+  );
 }
 
 function renderClipsBrowser() {
   elements.clipsGroups.innerHTML = "";
-  const hasClips = state.clips.length > 0;
-  elements.clipsBrowserEmpty.classList.toggle("hidden", hasClips);
+
+  const hasClips =
+    state.clips.length > 0;
+
+  elements.clipsBrowserEmpty.classList.toggle(
+    "hidden",
+    hasClips
+  );
 
   if (!hasClips) {
     state.currentClipInspectFile = "";
-    elements.clipBrowserVideo.removeAttribute("src");
+
+    elements.clipBrowserVideo.removeAttribute(
+      "src"
+    );
+
     elements.clipBrowserVideo.load();
-    elements.clipBrowserPlayerWrap.classList.add("hidden");
+
+    elements.clipBrowserPlayerWrap.classList.add(
+      "hidden"
+    );
+
     return;
   }
 
-  if (!state.currentClipInspectFile || !state.clipMap.has(state.currentClipInspectFile)) {
-    state.currentClipInspectFile = state.clips[0].file;
+  if (
+    !state.currentClipInspectFile ||
+    !state.clipMap.has(
+      state.currentClipInspectFile
+    )
+  ) {
+    state.currentClipInspectFile =
+      state.clips[0].file;
   }
 
   const grouped = new Map();
+
   for (const clip of state.clips) {
-    const group = clipDateGroup(clip.file);
+    const group =
+      clipDateGroup(clip.file);
+
     if (!grouped.has(group)) {
       grouped.set(group, []);
     }
+
     grouped.get(group).push(clip);
   }
 
-  const selectedGroup = clipDateGroup(state.currentClipInspectFile);
+  const selectedGroup =
+    clipDateGroup(
+      state.currentClipInspectFile
+    );
+
   for (const [group, clips] of grouped.entries()) {
-    const section = document.createElement("details");
+    const section =
+      document.createElement("details");
+
     section.className = "clip-group";
-    section.open = group === selectedGroup;
+    section.open =
+      group === selectedGroup;
 
-    const summary = document.createElement("summary");
-    summary.className = "clip-group-summary";
+    const summary =
+      document.createElement("summary");
 
-    const groupTitle = document.createElement("span");
+    summary.className =
+      "clip-group-summary";
+
+    const groupTitle =
+      document.createElement("span");
+
     groupTitle.textContent = group;
-    const groupCount = document.createElement("span");
-    groupCount.className = "muted";
-    groupCount.textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"}`;
 
-    summary.append(groupTitle, groupCount);
+    const groupCount =
+      document.createElement("span");
+
+    groupCount.className = "muted";
+
+    groupCount.textContent =
+      `${clips.length} clip` +
+      `${clips.length === 1 ? "" : "s"}`;
+
+    summary.append(
+      groupTitle,
+      groupCount
+    );
+
     section.append(summary);
 
-    const rows = document.createElement("div");
-    rows.className = "clip-group-rows";
+    const rows =
+      document.createElement("div");
+
+    rows.className =
+      "clip-group-rows";
 
     for (const clip of clips) {
-      const button = document.createElement("button");
+      const button =
+        document.createElement("button");
+
       button.type = "button";
-      button.className = "clip-inspect-row";
-      if (clip.file === state.currentClipInspectFile) {
-        button.classList.add("selected");
+      button.className =
+        "clip-inspect-row";
+
+      if (
+        clip.file ===
+        state.currentClipInspectFile
+      ) {
+        button.classList.add(
+          "selected"
+        );
       }
 
-      const left = document.createElement("span");
-      left.className = "clip-inspect-main";
-      const right = document.createElement("span");
-      right.className = "clip-inspect-duration muted";
+      const left =
+        document.createElement("span");
 
-      const leaf = document.createElement("strong");
-      leaf.textContent = clipLeafName(clip.file);
-      const full = document.createElement("span");
+      left.className =
+        "clip-inspect-main";
+
+      const right =
+        document.createElement("span");
+
+      right.className =
+        "clip-inspect-duration muted";
+
+      const leaf =
+        document.createElement("strong");
+
+      leaf.textContent =
+        clipLeafName(clip.file);
+
+      const full =
+        document.createElement("span");
+
       full.className = "muted";
       full.textContent = clip.file;
 
       left.append(leaf, full);
-      right.textContent = clip.duration ? formatSeconds(clip.duration) : "Unknown";
+
+      right.textContent =
+        clip.duration
+          ? formatSeconds(clip.duration)
+          : "Unknown";
 
       button.append(left, right);
-      button.addEventListener("click", () => {
-        state.currentClipInspectFile = clip.file;
-        renderClipsBrowser();
-      });
+
+      button.addEventListener(
+        "click",
+        () => {
+          state.currentClipInspectFile =
+            clip.file;
+
+          renderClipsBrowser();
+        }
+      );
 
       rows.append(button);
 
-      if (clip.file === state.currentClipInspectFile) {
-        const playerSlot = document.createElement("div");
-        playerSlot.className = "clip-browser-player-slot";
-        playerSlot.append(elements.clipBrowserPlayerWrap);
+      if (
+        clip.file ===
+        state.currentClipInspectFile
+      ) {
+        const playerSlot =
+          document.createElement("div");
+
+        playerSlot.className =
+          "clip-browser-player-slot";
+
+        playerSlot.append(
+          elements.clipBrowserPlayerWrap
+        );
+
         rows.append(playerSlot);
       }
     }
 
     section.append(rows);
-    elements.clipsGroups.append(section);
+
+    elements.clipsGroups.append(
+      section
+    );
   }
 
-  const selected = state.clipMap.get(state.currentClipInspectFile);
+  const selected =
+    state.clipMap.get(
+      state.currentClipInspectFile
+    );
+
   if (!selected) {
-    elements.clipBrowserPlayerWrap.classList.add("hidden");
+    elements.clipBrowserPlayerWrap.classList.add(
+      "hidden"
+    );
+
     return;
   }
 
-  if (elements.clipBrowserVideo.dataset.currentFile !== selected.file) {
-    elements.clipBrowserVideo.dataset.currentFile = selected.file;
-    elements.clipBrowserVideo.src = mediaUrl(selected.file);
+  if (
+    elements.clipBrowserVideo.dataset.currentFile !==
+    selected.file
+  ) {
+    elements.clipBrowserVideo.dataset.currentFile =
+      selected.file;
+
+    elements.clipBrowserVideo.src =
+      mediaUrl(selected.file);
+
     elements.clipBrowserVideo.load();
   }
 
-  const durationText = selected.duration ? formatSeconds(selected.duration) : "Unknown duration";
-  elements.clipBrowserMeta.textContent = `${selected.file} · ${durationText}`;
-  elements.clipBrowserPlayerWrap.classList.remove("hidden");
+  const durationText =
+    selected.duration
+      ? formatSeconds(selected.duration)
+      : "Unknown duration";
+
+  elements.clipBrowserMeta.textContent =
+    `${selected.file} · ${durationText}`;
+
+  elements.clipBrowserPlayerWrap.classList.remove(
+    "hidden"
+  );
 }
 
 function renderRendersList() {
   elements.rendersList.innerHTML = "";
-  const hasRenders = state.renders.length > 0;
 
-  elements.exportsScopeButton.classList.toggle("active-scope", state.renderScope === "exports");
-  elements.socialScopeButton.classList.toggle("active-scope", state.renderScope === "social");
+  const hasRenders =
+    state.renders.length > 0;
 
-  const emptyHint = state.renderScope === "social"
-    ? "No social-media exports yet.\n\nCreate one from the terminal with:\n\nvideo-tools social"
-    : "No rendered videos yet.\n\nRender an edit from the terminal with:\n\nvideo-tools render";
-  elements.rendersEmpty.textContent = emptyHint;
+  elements.exportsScopeButton.classList.toggle(
+    "active-scope",
+    state.renderScope === "exports"
+  );
 
-  elements.rendersEmpty.classList.toggle("hidden", hasRenders);
+  elements.socialScopeButton.classList.toggle(
+    "active-scope",
+    state.renderScope === "social"
+  );
+
+  const emptyHint =
+    state.renderScope === "social"
+      ? "No social-media exports yet.\n\nCreate one from the terminal with:\n\nvideo-tools social"
+      : "No rendered videos yet.\n\nRender an edit from the terminal with:\n\nvideo-tools render";
+
+  elements.rendersEmpty.textContent =
+    emptyHint;
+
+  elements.rendersEmpty.classList.toggle(
+    "hidden",
+    hasRenders
+  );
 
   if (!hasRenders) {
     state.currentRenderFilename = "";
-    elements.renderVideo.removeAttribute("src");
+
+    elements.renderVideo.removeAttribute(
+      "src"
+    );
+
     elements.renderVideo.load();
-    elements.renderPlayerWrap.classList.add("hidden");
+
+    elements.renderPlayerWrap.classList.add(
+      "hidden"
+    );
+
     return;
   }
 
-  if (!state.currentRenderFilename || !state.renders.some((item) => item.filename === state.currentRenderFilename)) {
-    state.currentRenderFilename = state.renders[0].filename;
+  if (
+    !state.currentRenderFilename ||
+    !state.renders.some(
+      (item) =>
+        item.filename ===
+        state.currentRenderFilename
+    )
+  ) {
+    state.currentRenderFilename =
+      state.renders[0].filename;
   }
 
   for (const renderItem of state.renders) {
-    const row = document.createElement("div");
+    const row =
+      document.createElement("div");
+
     row.className = "render-row";
 
-    const button = document.createElement("button");
+    const button =
+      document.createElement("button");
+
     button.type = "button";
     button.className = "render-item";
-    if (renderItem.filename === state.currentRenderFilename) {
+
+    if (
+      renderItem.filename ===
+      state.currentRenderFilename
+    ) {
       button.classList.add("selected");
     }
-    button.textContent = renderItem.filename;
-    button.addEventListener("click", () => {
-      state.currentRenderFilename = renderItem.filename;
-      renderRendersList();
-    });
+
+    button.textContent =
+      renderItem.filename;
+
+    button.addEventListener(
+      "click",
+      () => {
+        state.currentRenderFilename =
+          renderItem.filename;
+
+        renderRendersList();
+      }
+    );
 
     row.append(button);
 
-    if (renderItem.filename === state.currentRenderFilename) {
-      const playerSlot = document.createElement("div");
-      playerSlot.className = "render-player-slot";
-      playerSlot.append(elements.renderPlayerWrap);
+    if (
+      renderItem.filename ===
+      state.currentRenderFilename
+    ) {
+      const playerSlot =
+        document.createElement("div");
+
+      playerSlot.className =
+        "render-player-slot";
+
+      playerSlot.append(
+        elements.renderPlayerWrap
+      );
+
       row.append(playerSlot);
     }
 
     elements.rendersList.append(row);
   }
 
-  const selectedFilename = state.currentRenderFilename;
-  if (elements.renderVideo.dataset.currentFile !== selectedFilename) {
-    elements.renderVideo.dataset.currentFile = selectedFilename;
-    elements.renderVideo.src = renderUrl(selectedFilename);
+  const selectedFilename =
+    state.currentRenderFilename;
+
+  if (
+    elements.renderVideo.dataset.currentFile !==
+    selectedFilename
+  ) {
+    elements.renderVideo.dataset.currentFile =
+      selectedFilename;
+
+    elements.renderVideo.src =
+      renderUrl(selectedFilename);
+
     elements.renderVideo.load();
   }
-  elements.renderPlayerWrap.classList.remove("hidden");
+
+  elements.renderPlayerWrap.classList.remove(
+    "hidden"
+  );
 }
 
 async function refreshRenders() {
-  const endpoint = state.renderScope === "social" ? "/api/renders-social" : "/api/renders";
+  const endpoint =
+    state.renderScope === "social"
+      ? "/api/renders-social"
+      : "/api/renders";
+
   const data = await api(endpoint);
+
   state.renders = data.renders;
+
   renderRendersList();
 }
 
 async function refreshClips() {
-  const data = await api("/api/clips");
+  const data =
+    await api("/api/clips");
+
   state.clips = data.clips;
-  state.clipMap = new Map(state.clips.map((clip) => [clip.file, clip]));
+
+  state.clipMap =
+    new Map(
+      state.clips.map((clip) => [
+        clip.file,
+        clip,
+      ])
+    );
+
   renderClipPicker();
   renderTimeline();
   renderInspector();
@@ -704,13 +1424,16 @@ async function switchRenderScope(scope) {
   if (state.renderScope === scope) {
     return;
   }
+
   state.renderScope = scope;
   state.currentRenderFilename = "";
+
   await refreshRenders();
 }
 
 async function switchView(view) {
   state.currentView = view;
+
   renderView();
 
   if (view === "renders") {
@@ -721,19 +1444,39 @@ async function switchView(view) {
 }
 
 async function refreshEdits() {
-  const data = await api("/api/edits");
+  const data =
+    await api("/api/edits");
+
   state.edits = data.edits;
+
   renderEditSelector();
 }
 
 async function loadEdit(filename) {
-  const documentValue = await api(`/api/edits/${encodeURIComponent(filename)}`);
+  /*
+   * Never leave an old timeline preview running
+   * after loading another edit.
+   */
+  stopTimelinePreview({
+    hide: true,
+  });
+
+  const documentValue =
+    await api(
+      `/api/edits/${encodeURIComponent(filename)}`
+    );
+
   state.currentFilename = filename;
+
   markSaved(documentValue);
 }
 
 async function initialize() {
-  const [projectData, editData, clipData] = await Promise.all([
+  const [
+    projectData,
+    editData,
+    clipData,
+  ] = await Promise.all([
     api("/api/project"),
     api("/api/edits"),
     api("/api/clips"),
@@ -742,15 +1485,30 @@ async function initialize() {
   state.project = projectData;
   state.edits = editData.edits;
   state.clips = clipData.clips;
-  state.clipMap = new Map(state.clips.map((clip) => [clip.file, clip]));
 
-  elements.projectLine.textContent = `Project: ${projectData.name} · ${projectData.root}`;
+  state.clipMap =
+    new Map(
+      state.clips.map((clip) => [
+        clip.file,
+        clip,
+      ])
+    );
+
+  elements.projectLine.textContent =
+    `Project: ${projectData.name} · ${projectData.root}`;
 
   if (state.edits.length) {
-    await loadEdit(state.edits[0].filename);
+    await loadEdit(
+      state.edits[0].filename
+    );
   } else {
     state.currentFilename = "";
-    markSaved({ version: 1, output: "", clips: [] });
+
+    markSaved({
+      version: 1,
+      output: "",
+      clips: [],
+    });
   }
 
   renderClipPicker();
@@ -758,94 +1516,222 @@ async function initialize() {
 }
 
 function renderClipPicker() {
-  const term = elements.clipSearchInput.value.trim().toLowerCase();
+  const term =
+    elements.clipSearchInput.value
+      .trim()
+      .toLowerCase();
+
   elements.clipList.innerHTML = "";
 
-  const matches = state.clips.filter((clip) => clip.file.toLowerCase().includes(term));
+  const matches =
+    state.clips.filter((clip) =>
+      clip.file
+        .toLowerCase()
+        .includes(term)
+    );
 
   if (!matches.length) {
-    const empty = document.createElement("div");
+    const empty =
+      document.createElement("div");
+
     empty.className = "empty-state";
-    empty.textContent = "No clips match the current filter.";
+
+    empty.textContent =
+      "No clips match the current filter.";
+
     elements.clipList.append(empty);
+
     return;
   }
 
   for (const clip of matches) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "clip-option-card";
+    const button =
+      document.createElement("button");
 
-    const thumbWrap = document.createElement("div");
-    thumbWrap.className = "new-edit-thumb-wrap";
+    button.type = "button";
+    button.className =
+      "clip-option-card";
+
+    const thumbWrap =
+      document.createElement("div");
+
+    thumbWrap.className =
+      "new-edit-thumb-wrap";
 
     if (clip.thumbnail_url) {
-      const thumb = document.createElement("img");
+      const thumb =
+        document.createElement("img");
+
       thumb.className = "clip-thumb";
       thumb.loading = "lazy";
-      thumb.alt = `Thumbnail for ${clip.file}`;
-      thumb.src = clip.thumbnail_url;
+
+      thumb.alt =
+        `Thumbnail for ${clip.file}`;
+
+      thumb.src =
+        clip.thumbnail_url;
+
       thumbWrap.append(thumb);
     } else {
-      const placeholder = document.createElement("div");
-      placeholder.className = "clip-thumb clip-thumb-placeholder";
-      placeholder.setAttribute("aria-hidden", "true");
+      const placeholder =
+        document.createElement("div");
+
+      placeholder.className =
+        "clip-thumb clip-thumb-placeholder";
+
+      placeholder.setAttribute(
+        "aria-hidden",
+        "true"
+      );
+
       thumbWrap.append(placeholder);
     }
 
-    const details = document.createElement("span");
-    details.className = "clip-option-details";
+    const details =
+      document.createElement("span");
 
-    const fileName = document.createElement("strong");
+    details.className =
+      "clip-option-details";
+
+    const fileName =
+      document.createElement("strong");
+
     fileName.textContent = clip.file;
-    const clipName = document.createElement("span");
+
+    const clipName =
+      document.createElement("span");
+
     clipName.className = "muted";
     clipName.textContent = clip.name;
-    const clipDuration = document.createElement("span");
-    clipDuration.className = "muted";
-    clipDuration.textContent = clip.duration ? formatSeconds(clip.duration) : "Unknown duration";
 
-    details.append(fileName, clipName, clipDuration);
-    button.append(thumbWrap, details);
-    button.addEventListener("click", () => addClipToTimeline(clip));
+    const clipDuration =
+      document.createElement("span");
+
+    clipDuration.className = "muted";
+
+    clipDuration.textContent =
+      clip.duration
+        ? formatSeconds(clip.duration)
+        : "Unknown duration";
+
+    details.append(
+      fileName,
+      clipName,
+      clipDuration
+    );
+
+    button.append(
+      thumbWrap,
+      details
+    );
+
+    button.addEventListener(
+      "click",
+      () => addClipToTimeline(clip)
+    );
+
     elements.clipList.append(button);
   }
 }
 
 function addClipToTimeline(clip) {
-  const duration = clip.duration || 3;
+  const duration =
+    clip.duration || 3;
+
   state.document.clips.push({
     file: clip.file,
     start: 0,
     end: Math.min(3, duration),
     label: `Sample from ${clip.name}`,
   });
-  state.selectedIndex = state.document.clips.length - 1;
+
+  state.selectedIndex =
+    state.document.clips.length - 1;
+
   updateDirtyState();
   renderAll();
+
   elements.clipDialog.close();
 }
 
-function handleTimelineAction(index, action) {
+function handleTimelineAction(
+  index,
+  action
+) {
+  /*
+   * Editing the timeline while it is playing can
+   * invalidate the current preview sequence.
+   */
+  if (
+    state.timelinePreviewActive &&
+    ["up", "down", "remove"].includes(action)
+  ) {
+    stopTimelinePreview({
+      hide: true,
+    });
+  }
+
   if (action === "select") {
     state.selectedIndex = index;
-  } else if (action === "up" && index > 0) {
-    [state.document.clips[index - 1], state.document.clips[index]] = [state.document.clips[index], state.document.clips[index - 1]];
-    state.selectedIndex = index - 1;
+  } else if (
+    action === "up" &&
+    index > 0
+  ) {
+    [
+      state.document.clips[index - 1],
+      state.document.clips[index],
+    ] = [
+      state.document.clips[index],
+      state.document.clips[index - 1],
+    ];
+
+    state.selectedIndex =
+      index - 1;
+
     updateDirtyState();
-  } else if (action === "down" && index < state.document.clips.length - 1) {
-    [state.document.clips[index + 1], state.document.clips[index]] = [state.document.clips[index], state.document.clips[index + 1]];
-    state.selectedIndex = index + 1;
+  } else if (
+    action === "down" &&
+    index <
+      state.document.clips.length - 1
+  ) {
+    [
+      state.document.clips[index + 1],
+      state.document.clips[index],
+    ] = [
+      state.document.clips[index],
+      state.document.clips[index + 1],
+    ];
+
+    state.selectedIndex =
+      index + 1;
+
     updateDirtyState();
-  } else if (action === "remove") {
-    state.document.clips.splice(index, 1);
+  } else if (
+    action === "remove"
+  ) {
+    state.document.clips.splice(
+      index,
+      1
+    );
+
     if (!state.document.clips.length) {
       state.selectedIndex = -1;
-    } else if (state.selectedIndex >= state.document.clips.length) {
-      state.selectedIndex = state.document.clips.length - 1;
-    } else if (state.selectedIndex === index) {
-      state.selectedIndex = Math.min(index, state.document.clips.length - 1);
+    } else if (
+      state.selectedIndex >=
+      state.document.clips.length
+    ) {
+      state.selectedIndex =
+        state.document.clips.length - 1;
+    } else if (
+      state.selectedIndex === index
+    ) {
+      state.selectedIndex =
+        Math.min(
+          index,
+          state.document.clips.length - 1
+        );
     }
+
     updateDirtyState();
   }
 
@@ -854,27 +1740,61 @@ function handleTimelineAction(index, action) {
 
 function updateSelectedClip(changes) {
   const clip = currentClip();
+
   if (!clip) {
     return;
   }
 
-  Object.assign(clip, changes);
+  Object.assign(
+    clip,
+    changes
+  );
+
   updateDirtyState();
   renderAll();
 }
 
-function clampClipRange(nextStart, nextEnd) {
-  const info = selectedClipInfo();
-  const maxDuration = info?.duration ?? nextEnd;
-  let start = Math.max(0, nextStart);
-  let end = Math.max(start + 0.001, nextEnd);
+function clampClipRange(
+  nextStart,
+  nextEnd
+) {
+  const info =
+    selectedClipInfo();
+
+  const maxDuration =
+    info?.duration ?? nextEnd;
+
+  let start =
+    Math.max(0, nextStart);
+
+  let end =
+    Math.max(
+      start + 0.001,
+      nextEnd
+    );
+
   if (info?.duration) {
-    end = Math.min(end, maxDuration);
-    start = Math.min(start, Math.max(0, end - 0.001));
+    end =
+      Math.min(
+        end,
+        maxDuration
+      );
+
+    start =
+      Math.min(
+        start,
+        Math.max(
+          0,
+          end - 0.001
+        )
+      );
   }
+
   return {
-    start: Number(start.toFixed(3)),
-    end: Number(end.toFixed(3)),
+    start:
+      Number(start.toFixed(3)),
+    end:
+      Number(end.toFixed(3)),
   };
 }
 
@@ -883,62 +1803,143 @@ async function saveCurrentEdit() {
     return;
   }
 
-  const response = await api(`/api/edits/${encodeURIComponent(state.currentFilename)}`, {
-    method: "PUT",
-    body: JSON.stringify({ document: cloneCurrentDocument() }),
-  });
+  const response =
+    await api(
+      `/api/edits/${encodeURIComponent(
+        state.currentFilename
+      )}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          document:
+            cloneCurrentDocument(),
+        }),
+      }
+    );
+
   markSaved(response.document);
-  showToast(`Saved ${response.filename}`);
+
+  showToast(
+    `Saved ${response.filename}`
+  );
 }
 
 async function openDialog(mode) {
-  if (mode === "new" && state.dirty) {
-    const confirmed = window.confirm("Discard unsaved changes and create a new edit?");
+  if (
+    mode === "new" &&
+    state.dirty
+  ) {
+    const confirmed =
+      window.confirm(
+        "Discard unsaved changes and create a new edit?"
+      );
+
     if (!confirmed) {
       return;
     }
   }
 
-  const defaults = await api("/api/edits/defaults");
+  const defaults =
+    await api(
+      "/api/edits/defaults"
+    );
+
   state.activeDialogMode = mode;
   state.dialogOutputTouched = false;
-  elements.editDialogTitle.textContent = mode === "save-as" ? "Save As" : "New Edit";
-  elements.dialogSubmitButton.textContent = mode === "save-as" ? "Save As" : "Create";
-  elements.editDialogMessage.textContent = mode === "save-as"
-    ? "Save the current in-memory timeline as a new edit file."
-    : "Create a new empty timeline draft inside the project edits directory.";
-  elements.dialogFilename.value = defaults.filename;
-  elements.dialogOutput.value = defaults.output;
+
+  elements.editDialogTitle.textContent =
+    mode === "save-as"
+      ? "Save As"
+      : "New Edit";
+
+  elements.dialogSubmitButton.textContent =
+    mode === "save-as"
+      ? "Save As"
+      : "Create";
+
+  elements.editDialogMessage.textContent =
+    mode === "save-as"
+      ? "Save the current in-memory timeline as a new edit file."
+      : "Create a new empty timeline draft inside the project edits directory.";
+
+  elements.dialogFilename.value =
+    defaults.filename;
+
+  elements.dialogOutput.value =
+    defaults.output;
+
   elements.editDialog.showModal();
 }
 
 async function submitEditDialog(event) {
   event.preventDefault();
 
-  const filename = elements.dialogFilename.value.trim();
-  const output = elements.dialogOutput.value.trim();
+  const filename =
+    elements.dialogFilename.value.trim();
 
-  if (state.activeDialogMode === "new") {
-    const response = await api("/api/edits", {
-      method: "POST",
-      body: JSON.stringify({ filename, output }),
-    });
+  const output =
+    elements.dialogOutput.value.trim();
+
+  if (
+    state.activeDialogMode === "new"
+  ) {
+    const response =
+      await api("/api/edits", {
+        method: "POST",
+        body: JSON.stringify({
+          filename,
+          output,
+        }),
+      });
+
     await refreshEdits();
-    state.currentFilename = response.filename;
+
+    state.currentFilename =
+      response.filename;
+
     state.selectedIndex = -1;
-    markSaved(response.document);
-    showToast(`Created ${response.filename}`);
+
+    markSaved(
+      response.document
+    );
+
+    showToast(
+      `Created ${response.filename}`
+    );
   } else {
-    const documentValue = cloneCurrentDocument();
-    documentValue.output = output;
-    const response = await api(`/api/edits/${encodeURIComponent(state.currentFilename)}/save-as`, {
-      method: "POST",
-      body: JSON.stringify({ filename, document: documentValue }),
-    });
+    const documentValue =
+      cloneCurrentDocument();
+
+    documentValue.output =
+      output;
+
+    const response =
+      await api(
+        `/api/edits/${encodeURIComponent(
+          state.currentFilename
+        )}/save-as`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            filename,
+            document:
+              documentValue,
+          }),
+        }
+      );
+
     await refreshEdits();
-    state.currentFilename = response.filename;
-    markSaved(response.document);
-    showToast(`Saved as ${response.filename}`);
+
+    state.currentFilename =
+      response.filename;
+
+    markSaved(
+      response.document
+    );
+
+    showToast(
+      `Saved as ${response.filename}`
+    );
   }
 
   elements.editDialog.close();
@@ -946,16 +1947,35 @@ async function submitEditDialog(event) {
 
 async function submitRenameDialog(event) {
   event.preventDefault();
-  const filename = elements.renameFilename.value.trim();
-  const response = await api(`/api/edits/${encodeURIComponent(state.currentFilename)}/rename`, {
-    method: "POST",
-    body: JSON.stringify({ filename }),
-  });
+
+  const filename =
+    elements.renameFilename.value.trim();
+
+  const response =
+    await api(
+      `/api/edits/${encodeURIComponent(
+        state.currentFilename
+      )}/rename`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          filename,
+        }),
+      }
+    );
+
   await refreshEdits();
-  state.currentFilename = response.filename;
+
+  state.currentFilename =
+    response.filename;
+
   renderAll();
+
   elements.renameDialog.close();
-  showToast(`Renamed to ${response.filename}`);
+
+  showToast(
+    `Renamed to ${response.filename}`
+  );
 }
 
 async function handleDelete() {
@@ -963,35 +1983,71 @@ async function handleDelete() {
     return;
   }
 
-  const confirmed = window.confirm(
-    `Delete ${state.currentFilename}?\n\nThis only deletes the edit JSON. Rendered videos are not deleted.`
-  );
+  const confirmed =
+    window.confirm(
+      `Delete ${state.currentFilename}?\n\n` +
+      "This only deletes the edit JSON. Rendered videos are not deleted."
+    );
+
   if (!confirmed) {
     return;
   }
 
-  await api(`/api/edits/${encodeURIComponent(state.currentFilename)}`, { method: "DELETE" });
-  const deletedName = state.currentFilename;
+  stopTimelinePreview({
+    hide: true,
+  });
+
+  await api(
+    `/api/edits/${encodeURIComponent(
+      state.currentFilename
+    )}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  const deletedName =
+    state.currentFilename;
+
   await refreshEdits();
 
   if (state.edits.length) {
-    await loadEdit(state.edits[0].filename);
+    await loadEdit(
+      state.edits[0].filename
+    );
   } else {
     state.currentFilename = "";
     state.selectedIndex = -1;
-    markSaved({ version: 1, output: "", clips: [] });
+
+    markSaved({
+      version: 1,
+      output: "",
+      clips: [],
+    });
   }
 
-  showToast(`Deleted ${deletedName}`);
+  showToast(
+    `Deleted ${deletedName}`
+  );
 }
 
 async function handleEditSelection(event) {
-  const filename = event.target.value;
-  if (!filename || filename === state.currentFilename) {
+  const filename =
+    event.target.value;
+
+  if (
+    !filename ||
+    filename === state.currentFilename
+  ) {
     return;
   }
 
-  if (state.dirty && !window.confirm("Discard unsaved changes and load another edit?")) {
+  if (
+    state.dirty &&
+    !window.confirm(
+      "Discard unsaved changes and load another edit?"
+    )
+  ) {
     renderEditSelector();
     return;
   }
@@ -999,177 +2055,518 @@ async function handleEditSelection(event) {
   await loadEdit(filename);
 }
 
-elements.outputInput.addEventListener("input", (event) => {
-  state.document.output = event.target.value;
-  updateDirtyState();
-});
+/*
+ * Form and navigation events
+ */
 
-elements.editSelect.addEventListener("change", (event) => {
-  handleEditSelection(event).catch(reportError);
-});
+elements.outputInput.addEventListener(
+  "input",
+  (event) => {
+    state.document.output =
+      event.target.value;
 
-elements.saveButton.addEventListener("click", () => saveCurrentEdit().catch(reportError));
-elements.newButton.addEventListener("click", () => openNewEditBuilder().catch(reportError));
-elements.saveAsButton.addEventListener("click", () => openDialog("save-as").catch(reportError));
-elements.addClipButton.addEventListener("click", () => elements.clipDialog.showModal());
-elements.deleteButton.addEventListener("click", () => handleDelete().catch(reportError));
-elements.viewEditButton.addEventListener("click", () => {
-  switchView("edit").catch(reportError);
-});
-elements.viewRendersButton.addEventListener("click", () => {
-  switchView("renders").catch(reportError);
-});
-elements.viewClipsButton.addEventListener("click", () => {
-  switchView("clips").catch(reportError);
-});
-elements.newEditSelectAllButton.addEventListener("click", () => {
-  state.newEditSelectedFiles = new Set(state.clips.map((clip) => clip.file));
-  renderNewEditBuilder();
-});
-elements.newEditSelectNoneButton.addEventListener("click", () => {
-  state.newEditSelectedFiles = new Set();
-  renderNewEditBuilder();
-});
-elements.newEditCreateButton.addEventListener("click", () => {
-  createNewEditFromSelection().catch(reportError);
-});
-elements.newEditCancelButton.addEventListener("click", () => {
-  switchView("edit").catch(reportError);
-});
-elements.refreshRendersButton.addEventListener("click", () => {
-  refreshRenders().catch(reportError);
-});
-elements.refreshClipsBrowserButton.addEventListener("click", () => {
-  refreshClips().catch(reportError);
-});
-elements.exportsScopeButton.addEventListener("click", () => {
-  switchRenderScope("exports").catch(reportError);
-});
-elements.socialScopeButton.addEventListener("click", () => {
-  switchRenderScope("social").catch(reportError);
-});
-
-elements.renameButton.addEventListener("click", () => {
-  if (state.dirty) {
-    showToast("Save or Save As before renaming this edit.");
-    return;
+    updateDirtyState();
   }
-  elements.renameFilename.value = state.currentFilename;
-  elements.renameDialog.showModal();
-});
+);
 
-elements.dialogFilename.addEventListener("input", () => {
-  if (!state.dialogOutputTouched) {
-    elements.dialogOutput.value = deriveSuggestedOutput(elements.dialogFilename.value.trim());
+elements.editSelect.addEventListener(
+  "change",
+  (event) => {
+    handleEditSelection(event).catch(
+      reportError
+    );
   }
-});
+);
 
-elements.newEditFilenameInput.addEventListener("input", () => {
-  if (!state.newEditOutputTouched) {
-    elements.newEditOutputInput.value = deriveSuggestedOutput(elements.newEditFilenameInput.value.trim());
+elements.saveButton.addEventListener(
+  "click",
+  () =>
+    saveCurrentEdit().catch(
+      reportError
+    )
+);
+
+elements.newButton.addEventListener(
+  "click",
+  () =>
+    openNewEditBuilder().catch(
+      reportError
+    )
+);
+
+elements.saveAsButton.addEventListener(
+  "click",
+  () =>
+    openDialog("save-as").catch(
+      reportError
+    )
+);
+
+elements.addClipButton.addEventListener(
+  "click",
+  () =>
+    elements.clipDialog.showModal()
+);
+
+/*
+ * Whole timeline preview button.
+ */
+elements.previewTimelineButton.addEventListener(
+  "click",
+  startTimelinePreview
+);
+
+elements.deleteButton.addEventListener(
+  "click",
+  () =>
+    handleDelete().catch(
+      reportError
+    )
+);
+
+elements.viewEditButton.addEventListener(
+  "click",
+  () => {
+    switchView("edit").catch(
+      reportError
+    );
   }
-});
+);
 
-elements.newEditOutputInput.addEventListener("input", () => {
-  state.newEditOutputTouched = true;
-});
-
-elements.dialogOutput.addEventListener("input", () => {
-  state.dialogOutputTouched = true;
-});
-
-elements.editDialogForm.addEventListener("submit", (event) => submitEditDialog(event).catch(reportError));
-elements.dialogCancelButton.addEventListener("click", () => elements.editDialog.close());
-
-elements.renameDialogForm.addEventListener("submit", (event) => submitRenameDialog(event).catch(reportError));
-elements.renameCancelButton.addEventListener("click", () => elements.renameDialog.close());
-
-elements.clipSearchInput.addEventListener("input", renderClipPicker);
-elements.clipCancelButton.addEventListener("click", () => elements.clipDialog.close());
-
-elements.startRange.addEventListener("input", (event) => {
-  const clip = currentClip();
-  if (!clip) {
-    return;
+elements.viewRendersButton.addEventListener(
+  "click",
+  () => {
+    switchView("renders").catch(
+      reportError
+    );
   }
-  const next = clampClipRange(Number(event.target.value), clip.end);
-  updateSelectedClip(next);
-});
+);
 
-elements.endRange.addEventListener("input", (event) => {
-  const clip = currentClip();
-  if (!clip) {
-    return;
+elements.viewClipsButton.addEventListener(
+  "click",
+  () => {
+    switchView("clips").catch(
+      reportError
+    );
   }
-  const next = clampClipRange(clip.start, Number(event.target.value));
-  updateSelectedClip(next);
-});
+);
 
-elements.startInput.addEventListener("input", (event) => {
-  const clip = currentClip();
-  if (!clip) {
-    return;
+elements.newEditSelectAllButton.addEventListener(
+  "click",
+  () => {
+    state.newEditSelectedFiles =
+      new Set(
+        state.clips.map(
+          (clip) => clip.file
+        )
+      );
+
+    renderNewEditBuilder();
   }
-  const next = clampClipRange(Number(event.target.value), clip.end);
-  updateSelectedClip(next);
-});
+);
 
-elements.endInput.addEventListener("input", (event) => {
-  const clip = currentClip();
-  if (!clip) {
-    return;
+elements.newEditSelectNoneButton.addEventListener(
+  "click",
+  () => {
+    state.newEditSelectedFiles =
+      new Set();
+
+    renderNewEditBuilder();
   }
-  const next = clampClipRange(clip.start, Number(event.target.value));
-  updateSelectedClip(next);
-});
+);
 
-elements.labelInput.addEventListener("input", (event) => {
-  updateSelectedClip({ label: event.target.value });
-});
-
-elements.setStartButton.addEventListener("click", () => {
-  const clip = currentClip();
-  if (!clip) {
-    return;
+elements.newEditCreateButton.addEventListener(
+  "click",
+  () => {
+    createNewEditFromSelection().catch(
+      reportError
+    );
   }
-  const next = clampClipRange(elements.previewVideo.currentTime, clip.end);
-  updateSelectedClip(next);
-});
+);
 
-elements.setEndButton.addEventListener("click", () => {
-  const clip = currentClip();
-  if (!clip) {
-    return;
+elements.newEditCancelButton.addEventListener(
+  "click",
+  () => {
+    switchView("edit").catch(
+      reportError
+    );
   }
-  const next = clampClipRange(clip.start, elements.previewVideo.currentTime);
-  updateSelectedClip(next);
-});
+);
 
-elements.playSelectionButton.addEventListener("click", async () => {
-  const clip = currentClip();
-  if (!clip) {
-    return;
+elements.refreshRendersButton.addEventListener(
+  "click",
+  () => {
+    refreshRenders().catch(
+      reportError
+    );
   }
-  state.playbackStopAt = clip.end;
-  elements.previewVideo.currentTime = clip.start;
-  await elements.previewVideo.play();
-});
+);
 
-elements.previewVideo.addEventListener("timeupdate", () => {
-  elements.currentPosition.textContent = formatSeconds(elements.previewVideo.currentTime);
-  if (state.playbackStopAt !== null && elements.previewVideo.currentTime >= state.playbackStopAt) {
-    elements.previewVideo.pause();
-    state.playbackStopAt = null;
+elements.refreshClipsBrowserButton.addEventListener(
+  "click",
+  () => {
+    refreshClips().catch(
+      reportError
+    );
   }
-});
+);
 
-window.addEventListener("beforeunload", (event) => {
-  if (!state.dirty) {
-    return;
+elements.exportsScopeButton.addEventListener(
+  "click",
+  () => {
+    switchRenderScope(
+      "exports"
+    ).catch(reportError);
   }
-  event.preventDefault();
-  event.returnValue = "";
-});
+);
+
+elements.socialScopeButton.addEventListener(
+  "click",
+  () => {
+    switchRenderScope(
+      "social"
+    ).catch(reportError);
+  }
+);
+
+elements.renameButton.addEventListener(
+  "click",
+  () => {
+    if (state.dirty) {
+      showToast(
+        "Save or Save As before renaming this edit."
+      );
+      return;
+    }
+
+    elements.renameFilename.value =
+      state.currentFilename;
+
+    elements.renameDialog.showModal();
+  }
+);
+
+elements.dialogFilename.addEventListener(
+  "input",
+  () => {
+    if (!state.dialogOutputTouched) {
+      elements.dialogOutput.value =
+        deriveSuggestedOutput(
+          elements.dialogFilename.value.trim()
+        );
+    }
+  }
+);
+
+elements.newEditFilenameInput.addEventListener(
+  "input",
+  () => {
+    if (!state.newEditOutputTouched) {
+      elements.newEditOutputInput.value =
+        deriveSuggestedOutput(
+          elements.newEditFilenameInput.value.trim()
+        );
+    }
+  }
+);
+
+elements.newEditOutputInput.addEventListener(
+  "input",
+  () => {
+    state.newEditOutputTouched = true;
+  }
+);
+
+elements.dialogOutput.addEventListener(
+  "input",
+  () => {
+    state.dialogOutputTouched = true;
+  }
+);
+
+elements.editDialogForm.addEventListener(
+  "submit",
+  (event) =>
+    submitEditDialog(event).catch(
+      reportError
+    )
+);
+
+elements.dialogCancelButton.addEventListener(
+  "click",
+  () =>
+    elements.editDialog.close()
+);
+
+elements.renameDialogForm.addEventListener(
+  "submit",
+  (event) =>
+    submitRenameDialog(event).catch(
+      reportError
+    )
+);
+
+elements.renameCancelButton.addEventListener(
+  "click",
+  () =>
+    elements.renameDialog.close()
+);
+
+elements.clipSearchInput.addEventListener(
+  "input",
+  renderClipPicker
+);
+
+elements.clipCancelButton.addEventListener(
+  "click",
+  () =>
+    elements.clipDialog.close()
+);
+
+/*
+ * Selected clip trimming
+ */
+
+elements.startRange.addEventListener(
+  "input",
+  (event) => {
+    const clip = currentClip();
+
+    if (!clip) {
+      return;
+    }
+
+    const next =
+      clampClipRange(
+        Number(event.target.value),
+        clip.end
+      );
+
+    updateSelectedClip(next);
+  }
+);
+
+elements.endRange.addEventListener(
+  "input",
+  (event) => {
+    const clip = currentClip();
+
+    if (!clip) {
+      return;
+    }
+
+    const next =
+      clampClipRange(
+        clip.start,
+        Number(event.target.value)
+      );
+
+    updateSelectedClip(next);
+  }
+);
+
+elements.startInput.addEventListener(
+  "input",
+  (event) => {
+    const clip = currentClip();
+
+    if (!clip) {
+      return;
+    }
+
+    const next =
+      clampClipRange(
+        Number(event.target.value),
+        clip.end
+      );
+
+    updateSelectedClip(next);
+  }
+);
+
+elements.endInput.addEventListener(
+  "input",
+  (event) => {
+    const clip = currentClip();
+
+    if (!clip) {
+      return;
+    }
+
+    const next =
+      clampClipRange(
+        clip.start,
+        Number(event.target.value)
+      );
+
+    updateSelectedClip(next);
+  }
+);
+
+elements.labelInput.addEventListener(
+  "input",
+  (event) => {
+    updateSelectedClip({
+      label: event.target.value,
+    });
+  }
+);
+
+elements.setStartButton.addEventListener(
+  "click",
+  () => {
+    const clip = currentClip();
+
+    if (!clip) {
+      return;
+    }
+
+    const next =
+      clampClipRange(
+        elements.previewVideo.currentTime,
+        clip.end
+      );
+
+    updateSelectedClip(next);
+  }
+);
+
+elements.setEndButton.addEventListener(
+  "click",
+  () => {
+    const clip = currentClip();
+
+    if (!clip) {
+      return;
+    }
+
+    const next =
+      clampClipRange(
+        clip.start,
+        elements.previewVideo.currentTime
+      );
+
+    updateSelectedClip(next);
+  }
+);
+
+elements.playSelectionButton.addEventListener(
+  "click",
+  async () => {
+    const clip = currentClip();
+
+    if (!clip) {
+      return;
+    }
+
+    state.playbackStopAt =
+      clip.end;
+
+    elements.previewVideo.currentTime =
+      clip.start;
+
+    await elements.previewVideo.play();
+  }
+);
+
+elements.previewVideo.addEventListener(
+  "timeupdate",
+  () => {
+    elements.currentPosition.textContent =
+      formatSeconds(
+        elements.previewVideo.currentTime
+      );
+
+    if (
+      state.playbackStopAt !== null &&
+      elements.previewVideo.currentTime >=
+        state.playbackStopAt
+    ) {
+      elements.previewVideo.pause();
+
+      state.playbackStopAt = null;
+    }
+  }
+);
+
+/*
+ * Whole timeline preview playback.
+ */
+
+elements.timelinePreviewVideo.addEventListener(
+  "timeupdate",
+  () => {
+    if (!state.timelinePreviewActive) {
+      return;
+    }
+
+    const clip =
+      state.document.clips[
+        state.timelinePreviewIndex
+      ];
+
+    if (!clip) {
+      stopTimelinePreview();
+      return;
+    }
+
+    /*
+     * Advance slightly before/at the requested end
+     * point rather than waiting for the source video
+     * itself to finish.
+     */
+    if (
+      elements.timelinePreviewVideo.currentTime >=
+      clip.end - 0.02
+    ) {
+      advanceTimelinePreview();
+    }
+  }
+);
+
+elements.timelinePreviewVideo.addEventListener(
+  "ended",
+  () => {
+    if (
+      state.timelinePreviewActive
+    ) {
+      advanceTimelinePreview();
+    }
+  }
+);
+
+elements.timelinePreviewVideo.addEventListener(
+  "error",
+  () => {
+    if (
+      !state.timelinePreviewActive
+    ) {
+      return;
+    }
+
+    const clip =
+      state.document.clips[
+        state.timelinePreviewIndex
+      ];
+
+    elements.timelinePreviewStatus.textContent =
+      `Could not preview ${
+        clip?.file || "this clip"
+      } in the browser.`;
+  }
+);
+
+window.addEventListener(
+  "beforeunload",
+  (event) => {
+    if (!state.dirty) {
+      return;
+    }
+
+    event.preventDefault();
+    event.returnValue = "";
+  }
+);
 
 function reportError(error) {
   console.error(error);

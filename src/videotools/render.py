@@ -49,7 +49,6 @@ _ACCURATE_VIDEO_FIELDS = (
     "width",
     "height",
     "pix_fmt",
-    "avg_frame_rate",
 )
 
 _ACCURATE_AUDIO_FIELDS = (
@@ -97,12 +96,14 @@ def render_accurate(
 
     ffmpeg, signatures = _prepare_render(timeline, overwrite)
     has_audio, pixel_format = _validate_accurate_compatibility(signatures)
+    target_frame_rate = _accurate_target_frame_rate(timeline, signatures)
 
     command = build_accurate_command(
         ffmpeg=ffmpeg,
         timeline=timeline,
         has_audio=has_audio,
         pixel_format=pixel_format,
+        target_frame_rate=target_frame_rate,
         overwrite=overwrite,
     )
 
@@ -146,6 +147,7 @@ def build_accurate_command(
     timeline: EditTimeline,
     has_audio: bool,
     pixel_format: str | None,
+    target_frame_rate: str | None,
     overwrite: bool,
 ) -> list[str]:
     command = [
@@ -170,7 +172,11 @@ def build_accurate_command(
     command.extend(
         (
             "-filter_complex",
-            build_accurate_filter(len(timeline.clips), has_audio),
+            build_accurate_filter(
+                len(timeline.clips),
+                has_audio,
+                target_frame_rate=target_frame_rate,
+            ),
             "-map",
             "[vout]",
         )
@@ -214,13 +220,22 @@ def build_accurate_command(
     return command
 
 
-def build_accurate_filter(clip_count: int, has_audio: bool) -> str:
+def build_accurate_filter(
+    clip_count: int,
+    has_audio: bool,
+    *,
+    target_frame_rate: str | None = None,
+) -> str:
     filters = []
     concat_inputs = []
 
     for index in range(clip_count):
+        video_filters = []
+        if target_frame_rate:
+            video_filters.append(f"fps={target_frame_rate}")
+        video_filters.append("setpts=PTS-STARTPTS")
         filters.append(
-            f"[{index}:v:0]setpts=PTS-STARTPTS[v{index}]"
+            f"[{index}:v:0]" + ",".join(video_filters) + f"[v{index}]"
         )
         concat_inputs.append(f"[v{index}]")
 
@@ -411,11 +426,39 @@ def _validate_accurate_compatibility(
             fields = ", ".join(differences)
             raise RenderError(
                 "Accurate mode currently requires matching frame dimensions, "
-                "frame rates, pixel formats, and audio layouts. "
+                "pixel formats, and audio layouts. Frame-rate differences are "
+                "normalized automatically. "
                 f"{path} differs from {reference_path}: {fields}."
             )
 
     return reference_audio is not None, reference_video.get("pix_fmt")
+
+
+def probe_timeline_sources(timeline: EditTimeline) -> dict[Path, StreamSignature]:
+    """Probe and validate source files for a timeline without rendering it."""
+
+    ffprobe = _find_executable("ffprobe")
+    signatures = _probe_timeline_sources(timeline, ffprobe)
+    _validate_clip_ranges(timeline, signatures)
+    return signatures
+
+
+def accurate_target_frame_rate(
+    timeline: EditTimeline,
+    signatures: dict[Path, StreamSignature],
+) -> str | None:
+    """Return the frame rate accurate mode will use for the rendered timeline."""
+
+    return _accurate_target_frame_rate(timeline, signatures)
+
+
+def _accurate_target_frame_rate(
+    timeline: EditTimeline,
+    signatures: dict[Path, StreamSignature],
+) -> str | None:
+    if not timeline.clips:
+        return None
+    return dict(signatures[timeline.clips[0].file].video).get("avg_frame_rate")
 
 
 def validate_accurate_compatibility(

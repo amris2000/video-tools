@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 from typing import Callable
 
 from videotools.edit import EditValidationError, load_edit_timeline, parse_edit_timeline
 from videotools.edit_files import create_render_output_path, list_edit_files, read_edit_document
 from videotools.project import VideoProject
-from videotools.render import render_accurate, render_fast
+from videotools.render import (
+    accurate_target_frame_rate,
+    probe_timeline_sources,
+    render_accurate,
+    render_fast,
+    validate_accurate_compatibility,
+)
 
 
 def choose_render_mode(
@@ -122,6 +129,74 @@ def print_render_summary(
     output_func("")
 
 
+def _format_frame_rate(value: object) -> str:
+    if not value or value == "0/0":
+        return "unknown"
+    try:
+        return f"{float(Fraction(str(value))):.3f} fps"
+    except (ValueError, ZeroDivisionError):
+        return str(value)
+
+
+def _format_duration(seconds: float) -> str:
+    total_ms = round(seconds * 1000)
+    minutes, remainder = divmod(total_ms, 60_000)
+    whole_seconds, milliseconds = divmod(remainder, 1000)
+    return f"{minutes:02d}:{whole_seconds:02d}.{milliseconds:03d}"
+
+
+def print_render_preflight(
+    *,
+    timeline,
+    mode: str,
+    signatures,
+    output_func: Callable[[str], None] = print,
+) -> None:
+    total_duration = sum(clip.duration for clip in timeline.clips)
+    frame_rate_groups: dict[str, list[str]] = {}
+
+    for path, signature in signatures.items():
+        rate = dict(signature.video).get("avg_frame_rate")
+        frame_rate_groups.setdefault(str(rate), []).append(path.name)
+
+    output_func("Preflight:")
+    output_func("")
+    output_func(f"  Timeline duration: {_format_duration(total_duration)}")
+    output_func(f"  Source files: {len(signatures)}")
+    output_func("  Frame rates:")
+    for rate, files in frame_rate_groups.items():
+        output_func(f"    {_format_frame_rate(rate)}: {len(files)} file{'s' if len(files) != 1 else ''}")
+
+    if len(frame_rate_groups) > 1:
+        output_func("")
+        output_func("  Frame-rate differences detected:")
+        for rate, files in frame_rate_groups.items():
+            output_func(f"    {_format_frame_rate(rate)}: {', '.join(files)}")
+
+        if mode == "accurate":
+            target = accurate_target_frame_rate(timeline, signatures)
+            output_func(f"  Accurate mode will normalize video to {_format_frame_rate(target)}.")
+        else:
+            output_func("  Fast mode may reject these sources because it does not re-encode them.")
+
+    output_func("")
+
+
+def confirm_render(
+    *,
+    input_func: Callable[[str], str] = input,
+    output_func: Callable[[str], None] = print,
+) -> bool:
+    while True:
+        value = input_func("Render? [Y/n]: ").strip().lower()
+        if value in {"", "y", "yes"}:
+            return True
+        if value in {"n", "no", "q", "quit"}:
+            output_func("Render cancelled.")
+            return False
+        output_func("Please enter y or n.")
+
+
 def run_render_workflow(
     project: VideoProject,
     *,
@@ -163,8 +238,14 @@ def run_render_workflow(
         raw_document["output"] = fallback_output_path.relative_to(project.exports_dir).as_posix()
         timeline = parse_edit_timeline(raw_document, project)
 
-    output_path = fallback_output_path or timeline.output
+    # Every render gets a fresh output. The edit document's output field is
+    # descriptive only for this interactive workflow.
+    output_path = create_render_output_path(project, mode)
     render_timeline = replace(timeline, output=output_path)
+
+    signatures = probe_timeline_sources(render_timeline)
+    if mode == "accurate":
+        validate_accurate_compatibility(signatures)
 
     print_render_summary(
         project=project,
@@ -174,6 +255,16 @@ def run_render_workflow(
         output_path=output_path,
         output_func=output_func,
     )
+    print_render_preflight(
+        timeline=render_timeline,
+        mode=mode,
+        signatures=signatures,
+        output_func=output_func,
+    )
+
+    if not confirm_render(input_func=input_func, output_func=output_func):
+        return None
+
     output_func("Rendering...")
 
     renderer = render_fast if mode == "fast" else render_accurate
