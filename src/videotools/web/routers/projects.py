@@ -1,12 +1,16 @@
-from pathlib import Path
-import tomllib
-
 from fastapi import APIRouter, HTTPException
 
-from videotools.config import load_config
+from videotools.services.projects import (
+    ProjectInfo,
+    calculate_project_stats,
+    discover_projects,
+    get_project,
+)
 from videotools.web.schemas import (
+    ProjectDetailsResponse,
     ProjectPathsResponse,
     ProjectResponse,
+    ProjectStatsResponse,
 )
 
 
@@ -16,70 +20,79 @@ router = APIRouter(
 )
 
 
-@router.get("", response_model=list[ProjectResponse])
+def project_response(
+    project: ProjectInfo,
+) -> ProjectResponse:
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        path=str(project.path),
+        timezone=project.timezone,
+        paths=ProjectPathsResponse(
+            clips=project.paths.clips,
+            metadata=project.paths.metadata,
+            edits=project.paths.edits,
+            exports=project.paths.exports,
+            exports_social=(
+                project.paths.exports_social
+            ),
+            journal=project.paths.journal,
+        ),
+    )
+
+
+@router.get(
+    "",
+    response_model=list[ProjectResponse],
+)
 def get_projects() -> list[ProjectResponse]:
-    config = load_config()
-
-    if config.projects_directory is None:
+    try:
+        projects = discover_projects()
+    except RuntimeError as error:
         raise HTTPException(
             status_code=409,
-            detail="Video Tools has not been configured.",
-        )
+            detail=str(error),
+        ) from error
 
-    projects_directory = Path(
-        config.projects_directory
-    )
+    return [
+        project_response(project)
+        for project in projects
+    ]
 
-    if not projects_directory.exists():
+
+@router.get(
+    "/{project_id}",
+    response_model=ProjectDetailsResponse,
+)
+def get_project_details(
+    project_id: str,
+) -> ProjectDetailsResponse:
+    try:
+        project = get_project(project_id)
+    except RuntimeError as error:
         raise HTTPException(
             status_code=409,
-            detail="Configured projects directory does not exist.",
+            detail=str(error),
+        ) from error
+
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found.",
         )
 
-    projects: list[ProjectResponse] = []
+    stats = calculate_project_stats(project)
 
-    for directory in projects_directory.iterdir():
-        if not directory.is_dir():
-            continue
+    base = project_response(project)
 
-        project_file = directory / "project.toml"
-
-        if not project_file.is_file():
-            continue
-
-        try:
-            with project_file.open("rb") as file:
-                project_config = tomllib.load(file)
-        except (OSError, tomllib.TOMLDecodeError):
-            continue
-
-        project_name = project_config.get(
-            "name",
-            directory.name,
-        )
-
-        paths = project_config.get("paths", {})
-
-        projects.append(
-            ProjectResponse(
-                id=directory.name,
-                name=project_config.get(
-                    "name",
-                    directory.name,
-                ),
-                path=str(directory.resolve()),
-                timezone=project_config.get("timezone"),
-                paths=ProjectPathsResponse(
-                    clips=paths.get("clips", "clips"),
-                    metadata=paths.get("metadata", "metadata"),
-                    exports=paths.get("exports", "exports"),
-                    journal=paths.get("journal", "journal.json"),
-                ),
-            )
-        )
-
-    projects.sort(
-        key=lambda project: project.name.lower()
+    return ProjectDetailsResponse(
+        **base.model_dump(),
+        stats=ProjectStatsResponse(
+            clips=stats.clips,
+            edits=stats.edits,
+            renders=stats.renders,
+            social_exports=(
+                stats.social_exports
+            ),
+        ),
     )
-
-    return projects

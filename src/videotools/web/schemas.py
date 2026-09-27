@@ -13,7 +13,9 @@ class ConfigUpdate(BaseModel):
 class ProjectPathsResponse(BaseModel):
     clips: str
     metadata: str
+    edits: str
     exports: str
+    exports_social: str
     journal: str
 
 
@@ -23,3 +25,14 @@ class ProjectResponse(BaseModel):
     path: str
     timezone: str | None = None
     paths: ProjectPathsResponse
+
+
+class ProjectStatsResponse(BaseModel):
+    clips: int
+    edits: int
+    renders: int
+    social_exports: int
+
+
+class ProjectDetailsResponse(ProjectResponse):
+    stats: ProjectStatsResponse

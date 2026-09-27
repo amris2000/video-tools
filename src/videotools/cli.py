@@ -26,12 +26,7 @@ from videotools.thumbnails import (
     generate_project_thumbnails,
 )
 
-from videotools.application import run_application
-from videotools.lifecycle import (
-    dev as run_dev_environment,
-    install as install_application,
-    update as update_application,
-)
+
 
 
 def main():
