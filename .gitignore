@@ -42,3 +42,22 @@ desktop.ini
 .env
 .env.*
 !.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# React / Node
+frontend/node_modules/
+
+# Generated frontend distribution
+build/frontend/
+
+# Vite
+frontend/.vite/
+
+# Editor
+.vscode/
+.idea/

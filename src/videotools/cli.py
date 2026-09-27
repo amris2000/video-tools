@@ -26,6 +26,12 @@ from videotools.thumbnails import (
     generate_project_thumbnails,
 )
 
+from videotools.application import run_application
+from videotools.lifecycle import (
+    dev as run_dev_environment,
+    install as install_application,
+    update as update_application,
+)
 
 
 def main():
@@ -34,9 +40,10 @@ def main():
         description="Tools for managing video projects.",
     )
 
+
+
     subparsers = parser.add_subparsers(
         dest="command",
-        required=True,
     )
 
     subparsers.add_parser(
@@ -145,12 +152,31 @@ def main():
 
     args = parser.parse_args()
 
+
+    # Running without a command launches the application.
+    if args.command is None:
+        run_application()
+        return
+
     if args.command == "help":
         parser.print_help()
         print()
         print("Journal commands:")
         print("  video-tools journal add   Add a journal entry.")
         print("  video-tools journal list  List journal entries.")
+        return
+
+    # Application lifecycle commands do not require a video project.
+    if args.command == "install":
+        install_application()
+        return
+
+    if args.command == "update":
+        update_application()
+        return
+
+    if args.command == "dev":
+        run_dev_environment()
         return
 
     # init does not need an existing project
