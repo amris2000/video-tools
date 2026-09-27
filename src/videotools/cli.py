@@ -26,7 +26,11 @@ from videotools.thumbnails import (
     generate_project_thumbnails,
 )
 
-
+from videotools.lifecycle import (
+    dev as run_dev_environment,
+    install as install_application,
+    update as update_application,
+)
 
 
 def main():
@@ -44,6 +48,22 @@ def main():
     subparsers.add_parser(
         "help",
         help="List all available commands.",
+    )
+
+    # Application lifecycle
+    subparsers.add_parser(
+        "install",
+        help="Install frontend dependencies and build the application.",
+    )
+
+    subparsers.add_parser(
+        "update",
+        help="Refresh frontend dependencies and rebuild the application.",
+    )
+
+    subparsers.add_parser(
+        "dev",
+        help="Run the FastAPI and React development servers.",
     )
 
     # project
@@ -148,11 +168,10 @@ def main():
     args = parser.parse_args()
 
 
-    # Running without a command launches the application.
     if args.command is None:
-        run_application()
+        parser.print_help()
         return
-
+    
     if args.command == "help":
         parser.print_help()
         print()
