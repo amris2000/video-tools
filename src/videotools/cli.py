@@ -32,6 +32,7 @@ from videotools.lifecycle import (
     update as update_application,
 )
 
+from videotools.application import run_application
 
 def main():
     parser = argparse.ArgumentParser(
@@ -169,7 +170,7 @@ def main():
 
 
     if args.command is None:
-        parser.print_help()
+        run_application()
         return
     
     if args.command == "help":

@@ -360,3 +360,18 @@ All new Python, FastAPI, CLI, lifecycle, filesystem, and process-management func
 Prefer cross-platform Python facilities such as `pathlib.Path`, `shutil.which()`, `sys.executable`, `platformdirs`, and `subprocess`. Do not hard-code Windows or Unix filesystem paths, executable locations, path separators, or shell-specific commands.
 
 Avoid `shell=True` unless there is a specific, documented platform requirement. If platform-specific behavior is genuinely necessary, keep it isolated and explicitly guarded rather than making the general implementation platform-specific.
+
+## Application Lifecycle
+
+The supported application workflows are:
+
+- `video-tools` — normal application mode. Starts FastAPI, serves the built React frontend from `build/frontend/`, and opens the browser.
+- `video-tools dev` — development mode. Starts FastAPI with reload and the Vite development server.
+- `video-tools install` — validates required external tools, installs frontend dependencies, and builds the production React frontend.
+- `video-tools update` — refreshes frontend dependencies and rebuilds the production React frontend.
+
+Do not require Node.js, npm, or Vite to be running during normal application use. FastAPI serves the production React build directly.
+
+Do not make `video-tools update` perform Git operations. Source-control updates remain an explicit user action.
+
+Keep lifecycle functionality cross-platform between Windows and Linux.

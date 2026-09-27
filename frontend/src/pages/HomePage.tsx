@@ -36,7 +36,7 @@ export function HomePage() {
       <VStack align="stretch" spacing={8}>
         <HStack justify="space-between">
           <Box>
-            <Heading size="lg">Video Tools</Heading>
+            <Heading size="lg">Projects</Heading>
 
             <Text mt={2} color="gray.500">
               Select a video project to continue.
@@ -46,10 +46,6 @@ export function HomePage() {
           <HStack>
             <Button variant="outline" onClick={() => void refreshProjects()}>
               Refresh
-            </Button>
-
-            <Button variant="outline" onClick={() => navigate("/settings")}>
-              Settings
             </Button>
           </HStack>
         </HStack>
