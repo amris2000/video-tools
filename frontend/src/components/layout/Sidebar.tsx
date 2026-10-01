@@ -6,6 +6,7 @@ import {
   FiFolder,
   FiHome,
   FiEdit3,
+  FiDownload,
   FiPlayCircle,
 } from "react-icons/fi";
 
@@ -20,6 +21,12 @@ const navigation = [
     label: "Clips",
     icon: FiFilm,
     path: "/clips",
+    enabled: true,
+  },
+  {
+    label: "Import",
+    icon: FiDownload,
+    path: "/import",
     enabled: true,
   },
   {

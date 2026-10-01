@@ -41,6 +41,7 @@ class ProjectDetailsResponse(ProjectResponse):
 
 class ClipResponse(BaseModel):
     path: str
+    media_path: str
     name: str
     duration: float | None = None
     width: int | None = None
@@ -137,3 +138,34 @@ class FramingModeResponse(BaseModel):
 class SocialOptionsResponse(BaseModel):
     presets: list[SocialPresetResponse]
     framing_modes: list[FramingModeResponse]
+
+
+class ImportScanRequest(BaseModel):
+    source_path: str
+
+
+class ImportFileResponse(BaseModel):
+    source_relative_path: str
+    filename: str
+    size_bytes: int
+    status: Literal["new", "already_imported", "conflict"]
+
+
+class ImportPlanResponse(BaseModel):
+    source: str
+    total_source_files: int
+    already_imported: int
+    new_files: int
+    conflicts: int
+    files: list[ImportFileResponse]
+
+
+class ImportExecuteRequest(ImportScanRequest):
+    selected_paths: list[str]
+
+
+class ImportResultResponse(BaseModel):
+    imported: int
+    skipped: int
+    conflicts: int
+    errors: list[str]

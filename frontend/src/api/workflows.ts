@@ -107,9 +107,50 @@ export function deleteEdit(projectId: string, filename: string) {
   );
 }
 
-export function getMediaUrl(projectId: string, relativePath: string) {
-  const encodedPath = relativePath.split("/").map(encodeURIComponent).join("/");
+export function getMediaUrl(projectId: string, mediaPath: string) {
+  const encodedPath = mediaPath.split("/").map(encodeURIComponent).join("/");
   return `${projectPath(projectId)}/media/${encodedPath}`;
+}
+
+export interface ImportFile {
+  source_relative_path: string;
+  filename: string;
+  size_bytes: number;
+  status: "new" | "already_imported" | "conflict";
+}
+
+export interface ImportPlan {
+  source: string;
+  total_source_files: number;
+  already_imported: number;
+  new_files: number;
+  conflicts: number;
+  files: ImportFile[];
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  conflicts: number;
+  errors: string[];
+}
+
+export function scanGoProImport(projectId: string, sourcePath: string) {
+  return api<ImportPlan>(`${projectPath(projectId)}/imports/scan`, {
+    method: "POST",
+    body: JSON.stringify({ source_path: sourcePath }),
+  });
+}
+
+export function importGoProFiles(
+  projectId: string,
+  sourcePath: string,
+  selectedPaths: string[],
+) {
+  return api<ImportResult>(`${projectPath(projectId)}/imports`, {
+    method: "POST",
+    body: JSON.stringify({ source_path: sourcePath, selected_paths: selectedPaths }),
+  });
 }
 
 export function getExportUrl(

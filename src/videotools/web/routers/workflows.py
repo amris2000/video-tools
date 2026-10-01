@@ -18,6 +18,7 @@ from videotools.services.edits import (
     save_edit,
 )
 from videotools.services.jobs import JobInProgressError, get_job
+from videotools.services.imports import create_import_plan, import_selected_files
 from videotools.services.media import (
     parse_byte_range,
     resolve_export_video,
@@ -40,6 +41,10 @@ from videotools.web.schemas import (
     EditSummaryResponse,
     ExportsResponse,
     MediaJobResponse,
+    ImportExecuteRequest,
+    ImportPlanResponse,
+    ImportResultResponse,
+    ImportScanRequest,
     RenderRequest,
     SocialExportRequest,
     SocialOptionsResponse,
@@ -172,6 +177,32 @@ def get_social_export_media(project_id: str, filename: str, request: Request):
 def get_social_options(project_id: str) -> dict:
     _project(project_id)
     return social_options()
+
+
+@router.post("/{project_id}/imports/scan", response_model=ImportPlanResponse)
+def scan_project_import(
+    project_id: str,
+    request: ImportScanRequest,
+) -> dict:
+    try:
+        return create_import_plan(_project(project_id), request.source_path)
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.post("/{project_id}/imports", response_model=ImportResultResponse)
+def import_project_files(
+    project_id: str,
+    request: ImportExecuteRequest,
+) -> dict:
+    try:
+        return import_selected_files(
+            _project(project_id),
+            request.source_path,
+            request.selected_paths,
+        )
+    except Exception as error:
+        _raise_service_error(error)
 
 
 @router.post("/{project_id}/renders", response_model=MediaJobResponse, status_code=202)

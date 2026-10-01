@@ -9,6 +9,7 @@ import { ClipsPage } from "./pages/ClipsPage";
 import { EditorPage } from "./pages/EditorPage";
 import { ExportsPage } from "./pages/ExportsPage";
 import { HomePage } from "./pages/HomePage";
+import { ImportPage } from "./pages/ImportPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { RenderPage } from "./pages/RenderPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -40,6 +41,7 @@ function App() {
           <Route path="/projects/:projectId" element={<ProjectLayout />}>
             <Route index element={<OverviewPage />} />
             <Route path="clips" element={<ClipsPage />} />
+            <Route path="import" element={<ImportPage />} />
             <Route path="editor" element={<EditorPage />} />
             <Route path="render" element={<RenderPage />} />
             <Route path="exports" element={<ExportsPage />} />

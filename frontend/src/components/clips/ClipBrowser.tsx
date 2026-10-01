@@ -11,21 +11,9 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { getClips, type Clip } from "../../api/clips";
-import { getProject } from "../../api/projects";
 import { getMediaUrl } from "../../api/workflows";
 import { VideoPreviewModal } from "../media/VideoPreviewModal";
 import { ClipCard } from "./ClipCard";
-
-function clipsRelativePath(projectPath: string, clipsDirectory: string) {
-  const path = projectPath.replace(/\\/g, "/");
-  const prefix = clipsDirectory
-    .replace(/\\/g, "/")
-    .replace(/^\.\//, "")
-    .replace(/\/$/, "");
-  return prefix && path.startsWith(`${prefix}/`)
-    ? path.slice(prefix.length + 1)
-    : path;
-}
 
 export type ClipBrowserProps = { projectId: string } & (
   | { mode?: "view"; selectedClipPaths?: never; onSelectionChange?: never }
@@ -43,7 +31,6 @@ export function ClipBrowser(props: ClipBrowserProps) {
   const [result, setResult] = useState<{
     projectId: string;
     clips?: Clip[];
-    clipsDirectory?: string;
     error?: string;
   } | null>(null);
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
@@ -52,13 +39,10 @@ export function ClipBrowser(props: ClipBrowserProps) {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      getClips(projectId, controller.signal),
-      getProject(projectId, controller.signal),
-    ])
-      .then(([clips, project]) => {
+    getClips(projectId, controller.signal)
+      .then((clips) => {
         if (!controller.signal.aborted)
-          setResult({ projectId, clips, clipsDirectory: project.paths.clips });
+          setResult({ projectId, clips });
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -168,13 +152,7 @@ export function ClipBrowser(props: ClipBrowserProps) {
         title={previewClip?.name ?? "Clip preview"}
         videoUrl={
           previewClip
-            ? getMediaUrl(
-                projectId,
-                clipsRelativePath(
-                  previewClip.path,
-                  result.clipsDirectory ?? "clips",
-                ),
-              )
+            ? getMediaUrl(projectId, previewClip.media_path)
             : ""
         }
         metadata={

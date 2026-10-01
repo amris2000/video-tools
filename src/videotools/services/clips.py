@@ -68,6 +68,7 @@ def list_clips(project: VideoProject, project_id: str) -> list[dict]:
         creation = entry.get("creation_time_local") or entry.get("creation_time")
         clips.append(dict(
             path=relative, name=path.name, duration=_number(entry.get("duration")),
+            media_path=path.relative_to(project.clips_dir).as_posix(),
             width=_dimension(video.get("width")), height=_dimension(video.get("height")),
             fps=_number(video.get("fps")), creation_time=creation if isinstance(creation, str) else None,
             thumbnail_url=thumbnail_url,
