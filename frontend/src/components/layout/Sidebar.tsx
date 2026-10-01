@@ -73,7 +73,11 @@ export function Sidebar() {
         Project
       </Text>
 
-      <Stack spacing={1} direction={{ base: "row", md: "column" }} overflowX={{ base: "auto", md: "visible" }}>
+      <Stack
+        spacing={1}
+        direction={{ base: "row", md: "column" }}
+        overflowX={{ base: "auto", md: "visible" }}
+      >
         {navigation.map((item) => {
           const target = `${projectBasePath}${item.path}`;
 

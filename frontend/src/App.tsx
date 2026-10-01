@@ -43,7 +43,9 @@ function App() {
             <Route path="editor" element={<EditorPage />} />
             <Route path="render" element={<RenderPage />} />
             <Route path="exports" element={<ExportsPage />} />
-            {import.meta.env.DEV && <Route path="clips/demo" element={<ClipBrowserDemo />} />}
+            {import.meta.env.DEV && (
+              <Route path="clips/demo" element={<ClipBrowserDemo />} />
+            )}
           </Route>
         </Route>
 

@@ -58,7 +58,9 @@ export function getEdits(projectId: string, signal?: AbortSignal) {
 }
 
 export function getEdit(projectId: string, filename: string) {
-  return api<EditDocument>(`${projectPath(projectId)}/edits/${encodeURIComponent(filename)}`);
+  return api<EditDocument>(
+    `${projectPath(projectId)}/edits/${encodeURIComponent(filename)}`,
+  );
 }
 
 export function createEdit(projectId: string, filename?: string) {
@@ -68,24 +70,41 @@ export function createEdit(projectId: string, filename?: string) {
   });
 }
 
-export function saveEdit(projectId: string, filename: string, document: EditDocument) {
-  return api<EditResponse>(`${projectPath(projectId)}/edits/${encodeURIComponent(filename)}`, {
-    method: "PUT",
-    body: JSON.stringify({ document }),
-  });
+export function saveEdit(
+  projectId: string,
+  filename: string,
+  document: EditDocument,
+) {
+  return api<EditResponse>(
+    `${projectPath(projectId)}/edits/${encodeURIComponent(filename)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ document }),
+    },
+  );
 }
 
-export function renameEdit(projectId: string, filename: string, newFilename: string) {
-  return api<{ filename: string }>(`${projectPath(projectId)}/edits/${encodeURIComponent(filename)}/rename`, {
-    method: "POST",
-    body: JSON.stringify({ filename: newFilename }),
-  });
+export function renameEdit(
+  projectId: string,
+  filename: string,
+  newFilename: string,
+) {
+  return api<{ filename: string }>(
+    `${projectPath(projectId)}/edits/${encodeURIComponent(filename)}/rename`,
+    {
+      method: "POST",
+      body: JSON.stringify({ filename: newFilename }),
+    },
+  );
 }
 
 export function deleteEdit(projectId: string, filename: string) {
-  return api<void>(`${projectPath(projectId)}/edits/${encodeURIComponent(filename)}`, {
-    method: "DELETE",
-  });
+  return api<void>(
+    `${projectPath(projectId)}/edits/${encodeURIComponent(filename)}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function getMediaUrl(projectId: string, relativePath: string) {
@@ -93,7 +112,11 @@ export function getMediaUrl(projectId: string, relativePath: string) {
   return `${projectPath(projectId)}/media/${encodedPath}`;
 }
 
-export function getExportUrl(projectId: string, filename: string, social = false) {
+export function getExportUrl(
+  projectId: string,
+  filename: string,
+  social = false,
+) {
   const collection = social ? "social-exports" : "exports";
   return `${projectPath(projectId)}/${collection}/${encodeURIComponent(filename)}`;
 }
@@ -103,10 +126,16 @@ export function getProjectExports(projectId: string, signal?: AbortSignal) {
 }
 
 export function getSocialOptions(projectId: string, signal?: AbortSignal) {
-  return api<SocialOptions>(`${projectPath(projectId)}/social-options`, { signal });
+  return api<SocialOptions>(`${projectPath(projectId)}/social-options`, {
+    signal,
+  });
 }
 
-export function startRender(projectId: string, editFilename: string, mode: "accurate" | "fast") {
+export function startRender(
+  projectId: string,
+  editFilename: string,
+  mode: "accurate" | "fast",
+) {
   return api<MediaJob>(`${projectPath(projectId)}/renders`, {
     method: "POST",
     body: JSON.stringify({ edit_filename: editFilename, mode }),
@@ -126,5 +155,7 @@ export function startSocialExport(
 }
 
 export function getMediaJob(projectId: string, jobId: string) {
-  return api<MediaJob>(`${projectPath(projectId)}/jobs/${encodeURIComponent(jobId)}`);
+  return api<MediaJob>(
+    `${projectPath(projectId)}/jobs/${encodeURIComponent(jobId)}`,
+  );
 }
