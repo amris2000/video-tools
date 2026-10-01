@@ -26,6 +26,7 @@ import {
   FiArrowUp,
   FiChevronsDown,
   FiChevronsUp,
+  FiCopy,
   FiEdit2,
   FiPlay,
   FiPlus,
@@ -387,6 +388,19 @@ export function EditorPage() {
     setSelectedId(id);
   }
 
+  function duplicateOccurrence(id: string) {
+    const duplicateId = crypto.randomUUID();
+    setOccurrences((current) => {
+      const index = current.findIndex((item) => item.id === id);
+      if (index < 0) return current;
+      const duplicate = { ...current[index], id: duplicateId };
+      const next = [...current];
+      next.splice(index + 1, 0, duplicate);
+      return next;
+    });
+    setSelectedId(duplicateId);
+  }
+
   function removeOccurrence(id: string, index: number) {
     const next = occurrences.filter((item) => item.id !== id);
     setOccurrences(next);
@@ -504,8 +518,16 @@ export function EditorPage() {
       </FormControl>
 
       <Divider />
-
-      <VStack align="stretch" spacing={5}>
+      <SimpleGrid
+        columns={{ base: 1, xl: 2 }}
+        templateColumns={{
+          base: "minmax(0, 1fr)",
+          xl: "minmax(0, 0.4fr) minmax(0, 0.6fr)",
+        }}
+        spacing={6}
+        alignItems="start"
+      >
+      <VStack align="stretch" spacing={5} order={{ base: 1, xl: 2 }}>
         <Heading size="md">Selected occurrence</Heading>
         {!selectedOccurrence ? (
           <Text color="gray.600">
@@ -646,8 +668,7 @@ export function EditorPage() {
         )}
       </VStack>
 
-      <Divider />
-      <VStack align="stretch" spacing={2}>
+      <VStack align="stretch" spacing={2} order={{ base: 0, xl: 1 }}>
         <HStack justify="space-between">
           <Heading size="md">Timeline</Heading>
           <Text color="gray.600">{occurrences.length} occurrences</Text>
@@ -687,6 +708,14 @@ export function EditorPage() {
                   </HStack>
                 </Button>
                 <HStack spacing={0} flexShrink={0}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Duplicate occurrence"
+                    title="Duplicate occurrence"
+                    icon={<FiCopy />}
+                    onClick={() => duplicateOccurrence(item.id)}
+                  />
                   <IconButton
                     size="sm"
                     variant="ghost"
@@ -738,14 +767,12 @@ export function EditorPage() {
           ))
         )}
       </VStack>
-
+      </SimpleGrid>
       <Divider />
       <HStack justify="space-between" align="end" flexWrap="wrap">
         <Box>
           <Heading size="md">Source clips</Heading>
-          <Text color="gray.600">
-            Each add creates a separate timeline occurrence.
-          </Text>
+          <Text color="gray.600">Each add creates a separate timeline occurrence.</Text>
         </Box>
         <Button
           leftIcon={<FiPlus />}

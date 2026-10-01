@@ -32,6 +32,11 @@ export function getProjects(): Promise<Project[]> {
   return api<Project[]>("/api/projects");
 }
 
-export function getProject(projectId: string): Promise<ProjectDetails> {
-  return api<ProjectDetails>(`/api/projects/${encodeURIComponent(projectId)}`);
+export function getProject(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectDetails> {
+  return api<ProjectDetails>(`/api/projects/${encodeURIComponent(projectId)}`, {
+    signal,
+  });
 }

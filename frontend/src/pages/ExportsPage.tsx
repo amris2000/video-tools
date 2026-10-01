@@ -1,6 +1,7 @@
 import {
   Alert,
   AlertIcon,
+  AspectRatio,
   Box,
   Button,
   Divider,
@@ -29,6 +30,8 @@ import {
   type ProjectExports,
   type SocialOptions,
 } from "../api/workflows";
+import { FiPlayCircle } from "react-icons/fi";
+import { VideoPreviewModal } from "../components/media/VideoPreviewModal";
 
 function formatSize(size: number) {
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(0)} KB`;
@@ -39,14 +42,14 @@ function ExportSection({
   title,
   description,
   files,
-  projectId,
   social = false,
+  onSelect,
 }: {
   title: string;
   description: string;
   files: ExportFile[];
-  projectId: string;
   social?: boolean;
+  onSelect: (file: ExportFile, social: boolean) => void;
 }) {
   return (
     <Stack align="stretch" spacing={4}>
@@ -59,37 +62,37 @@ function ExportSection({
           No {social ? "social exports" : "renders"} yet.
         </Text>
       ) : (
-        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+        <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
           {files.map((file) => (
-            <Box
+            <Button
+              type="button"
               key={file.filename}
+              display="block"
+              width="100%"
+              height="auto"
+              p={0}
+              whiteSpace="normal"
+              textAlign="left"
+              bg="white"
               borderWidth="1px"
               borderColor="gray.200"
               borderRadius="md"
-              bg="white"
               overflow="hidden"
+              onClick={() => onSelect(file, social)}
+              _hover={{ borderColor: "blue.400", transform: "translateY(-1px)" }}
+              _active={{ transform: "none" }}
             >
-              <video
-                controls
-                preload="none"
-                src={getExportUrl(projectId, file.filename, social)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  maxHeight: 360,
-                  background: "#111",
-                }}
-              />
-              <Stack p={4} spacing={1}>
-                <Text fontWeight="semibold" overflowWrap="anywhere">
-                  {file.filename}
-                </Text>
-                <Text fontSize="sm" color="gray.600">
-                  {formatSize(file.size_bytes)} ·{" "}
-                  {new Date(file.modified_at).toLocaleString()}
-                </Text>
+              <AspectRatio ratio={16 / 10} bg="gray.900">
+                <Stack color="white" align="center" justify="center" spacing={2}>
+                  <FiPlayCircle size={34} />
+                  <Text fontSize="sm">Preview {social ? "social export" : "render"}</Text>
+                </Stack>
+              </AspectRatio>
+              <Stack p={3} spacing={1} align="stretch">
+                <Text fontSize="sm" fontWeight="semibold" overflowWrap="anywhere" noOfLines={2}>{file.filename}</Text>
+                <Text fontSize="xs" color="gray.600">{formatSize(file.size_bytes)} · {new Date(file.modified_at).toLocaleString()}</Text>
               </Stack>
-            </Box>
+            </Button>
           ))}
         </SimpleGrid>
       )}
@@ -115,6 +118,7 @@ export function ExportsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [preview, setPreview] = useState<{ file: ExportFile; social: boolean } | null>(null);
   const jobId = job?.job_id;
   const jobStatus = job?.status;
 
@@ -272,7 +276,7 @@ export function ExportsPage() {
         title="Normal renders"
         description="Rendered edits in the configured exports directory."
         files={exports.renders}
-        projectId={activeProjectId}
+        onSelect={(file, social) => setPreview({ file, social })}
       />
       <Divider />
       <Stack align="stretch" spacing={4}>
@@ -382,8 +386,19 @@ export function ExportsPage() {
         title="Social exports"
         description="Vertical derivatives in the configured social exports directory."
         files={exports.social_exports}
-        projectId={activeProjectId}
         social
+        onSelect={(file, social) => setPreview({ file, social })}
+      />
+      <VideoPreviewModal
+        isOpen={preview !== null}
+        onClose={() => setPreview(null)}
+        title={preview?.file.filename ?? "Export preview"}
+        videoUrl={preview ? getExportUrl(activeProjectId, preview.file.filename, preview.social) : ""}
+        metadata={preview && <>
+          <Text fontWeight="semibold">{preview.social ? "Social export" : "Normal render"}</Text>
+          <Text color="gray.600">{formatSize(preview.file.size_bytes)}</Text>
+          <Text color="gray.600">{new Date(preview.file.modified_at).toLocaleString()}</Text>
+        </>}
       />
     </VStack>
   );

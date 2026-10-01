@@ -31,10 +31,22 @@ export function RenderPage() {
   const [editFilename, setEditFilename] = useState("");
   const [mode, setMode] = useState<"accurate" | "fast">("accurate");
   const [job, setJob] = useState<MediaJob | null>(null);
+  const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const jobId = job?.job_id;
   const jobStatus = job?.status;
+
+  function formatElapsed(value: number) {
+    const seconds = value % 60;
+    const totalMinutes = Math.floor(value / 60);
+    const minutes = totalMinutes % 60;
+    const hours = Math.floor(totalMinutes / 60);
+    return hours
+      ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+      : `${String(totalMinutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,13 +99,31 @@ export function RenderPage() {
     };
   }, [activeProjectId, jobId, jobStatus]);
 
+  useEffect(() => {
+    if (
+      jobStartedAt === null ||
+      !jobStatus ||
+      !["queued", "running"].includes(jobStatus)
+    ) return;
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.floor((Date.now() - jobStartedAt) / 1000));
+    };
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [jobStartedAt, jobStatus]);
+
   async function submitRender() {
     if (!editFilename || (job && ["queued", "running"].includes(job.status)))
       return;
     setError("");
+    const startedAt = Date.now();
+    setJobStartedAt(startedAt);
+    setElapsedSeconds(0);
     try {
       setJob(await startRender(activeProjectId, editFilename, mode));
     } catch (reason) {
+      setJobStartedAt(null);
       setError(
         reason instanceof Error ? reason.message : "Could not start render.",
       );
@@ -207,7 +237,7 @@ export function RenderPage() {
             {completed && <Text>{job.output_filename}</Text>}
             {running && (
               <Text fontSize="sm">
-                This operation continues in the local application process.
+                Elapsed: {formatElapsed(elapsedSeconds)} · This operation continues in the local application process.
               </Text>
             )}
           </VStack>

@@ -1,26 +1,31 @@
 import {
   Alert,
   AlertIcon,
-  AspectRatio,
   Button,
   HStack,
-  Modal,
-  ModalBody,
-  ModalCloseButton,
-  ModalContent,
-  ModalHeader,
-  ModalOverlay,
   SimpleGrid,
   Spinner,
-  Stack,
   Text,
   VStack,
   useDisclosure,
 } from "@chakra-ui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getClips, type Clip } from "../../api/clips";
+import { getProject } from "../../api/projects";
 import { getMediaUrl } from "../../api/workflows";
+import { VideoPreviewModal } from "../media/VideoPreviewModal";
 import { ClipCard } from "./ClipCard";
+
+function clipsRelativePath(projectPath: string, clipsDirectory: string) {
+  const path = projectPath.replace(/\\/g, "/");
+  const prefix = clipsDirectory
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/\/$/, "");
+  return prefix && path.startsWith(`${prefix}/`)
+    ? path.slice(prefix.length + 1)
+    : path;
+}
 
 export type ClipBrowserProps = { projectId: string } & (
   | { mode?: "view"; selectedClipPaths?: never; onSelectionChange?: never }
@@ -38,28 +43,31 @@ export function ClipBrowser(props: ClipBrowserProps) {
   const [result, setResult] = useState<{
     projectId: string;
     clips?: Clip[];
+    clipsDirectory?: string;
     error?: string;
   } | null>(null);
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
   const [attempt, setAttempt] = useState(0);
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    getClips(projectId, controller.signal).then(
-      (clips) => {
-        if (!controller.signal.aborted) setResult({ projectId, clips });
+    Promise.all([
+      getClips(projectId, controller.signal),
+      getProject(projectId, controller.signal),
+    ]).then(
+      ([clips, project]) => {
+        if (!controller.signal.aborted)
+          setResult({ projectId, clips, clipsDirectory: project.paths.clips });
       },
-      (error) => {
+    ).catch((error) => {
         if (!controller.signal.aborted)
           setResult({
             projectId,
             error:
               error instanceof Error ? error.message : "Could not load clips.",
           });
-      },
-    );
+      });
     return () => controller.abort();
   }, [projectId, attempt]);
 
@@ -104,9 +112,6 @@ export function ClipBrowser(props: ClipBrowserProps) {
   }
 
   function closePreview() {
-    previewVideoRef.current?.pause();
-    previewVideoRef.current?.removeAttribute("src");
-    previewVideoRef.current?.load();
     setPreviewClip(null);
     onClose();
   }
@@ -157,64 +162,25 @@ export function ClipBrowser(props: ClipBrowserProps) {
           />
         ))}
       </SimpleGrid>
-      <Modal
+      <VideoPreviewModal
         isOpen={isOpen}
         onClose={closePreview}
-        size="6xl"
-        isCentered
-        scrollBehavior="inside"
-      >
-        <ModalOverlay />
-        <ModalContent
-          maxW={{ base: "calc(100vw - 24px)", xl: "1400px" }}
-          maxH="calc(100vh - 32px)"
-        >
-          <ModalHeader pr={12}>{previewClip?.name}</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={6}>
-            {previewClip && (
-              <Stack spacing={4}>
-                <AspectRatio
-                  ratio={16 / 9}
-                  bg="black"
-                  borderRadius="md"
-                  overflow="hidden"
-                >
-                  <video
-                    ref={previewVideoRef}
-                    controls
-                    preload="metadata"
-                    src={getMediaUrl(projectId, previewClip.path)}
-                  />
-                </AspectRatio>
-                <HStack spacing={4} flexWrap="wrap">
-                  <Text fontWeight="semibold">
-                    {previewClip.duration === null
-                      ? "Duration unavailable"
-                      : `${Math.floor(previewClip.duration / 60)}:${String(Math.floor(previewClip.duration % 60)).padStart(2, "0")}`}
-                  </Text>
-                  {previewClip.width && previewClip.height && (
-                    <Text color="gray.600">
-                      {previewClip.width} × {previewClip.height}
-                    </Text>
-                  )}
-                  {previewClip.fps && (
-                    <Text color="gray.600">{previewClip.fps} fps</Text>
-                  )}
-                  {previewClip.creation_time && (
-                    <Text color="gray.600">
-                      {previewClip.creation_time.replace("T", " ")}
-                    </Text>
-                  )}
-                </HStack>
-                <Text fontSize="sm" color="gray.500" overflowWrap="anywhere">
-                  {previewClip.path}
-                </Text>
-              </Stack>
-            )}
-          </ModalBody>
-        </ModalContent>
-      </Modal>
+        title={previewClip?.name ?? "Clip preview"}
+        videoUrl={previewClip
+          ? getMediaUrl(projectId, clipsRelativePath(previewClip.path, result.clipsDirectory ?? "clips"))
+          : ""}
+        metadata={previewClip && <>
+          <Text fontWeight="semibold">
+            {previewClip.duration === null
+              ? "Duration unavailable"
+              : `${Math.floor(previewClip.duration / 60)}:${String(Math.floor(previewClip.duration % 60)).padStart(2, "0")}`}
+          </Text>
+          {previewClip.width && previewClip.height && <Text color="gray.600">{previewClip.width} × {previewClip.height}</Text>}
+          {previewClip.fps && <Text color="gray.600">{previewClip.fps} fps</Text>}
+          {previewClip.creation_time && <Text color="gray.600">{previewClip.creation_time.replace("T", " ")}</Text>}
+          <Text fontSize="sm" color="gray.500" overflowWrap="anywhere">{previewClip.path}</Text>
+        </>}
+      />
     </VStack>
   );
 }

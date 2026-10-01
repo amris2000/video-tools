@@ -13,7 +13,7 @@ export function ProjectLayout() {
           width="100%"
           maxWidth="1400px"
           minHeight="100%"
-          mx="auto"
+          mx={0}
           p={{ base: 4, md: 8 }}
         >
           <Outlet />
