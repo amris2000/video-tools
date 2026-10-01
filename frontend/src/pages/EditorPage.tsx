@@ -527,252 +527,257 @@ export function EditorPage() {
         spacing={6}
         alignItems="start"
       >
-      <VStack align="stretch" spacing={5} order={{ base: 1, xl: 2 }}>
-        <Heading size="md">Selected occurrence</Heading>
-        {!selectedOccurrence ? (
-          <Text color="gray.600">
-            Select a timeline occurrence to preview and trim it.
-          </Text>
-        ) : (
-          <>
-            <Box bg="black" borderRadius="md" overflow="hidden">
-              <video
-                ref={videoRef}
-                controls
-                preload="metadata"
-                style={{ width: "100%", maxHeight: 420 }}
-                onTimeUpdate={(event) => {
-                  if (
-                    selectedOccurrence &&
-                    event.currentTarget.currentTime >= selectedOccurrence.end
-                  )
-                    event.currentTarget.pause();
-                }}
-              />
-            </Box>
-            <Text color="gray.600" overflowWrap="anywhere">
-              {selectedOccurrence.file}
+        <VStack align="stretch" spacing={5} order={{ base: 1, xl: 2 }}>
+          <Heading size="md">Selected occurrence</Heading>
+          {!selectedOccurrence ? (
+            <Text color="gray.600">
+              Select a timeline occurrence to preview and trim it.
             </Text>
-            <HStack>
-              <Button leftIcon={<FiPlay />} onClick={playSelection}>
-                Play selection
-              </Button>
-              <Text color="gray.600">
-                {seconds(selectedOccurrence.end - selectedOccurrence.start)}
-              </Text>
-            </HStack>
-            {sourceDuration !== null && sourceDuration > 0 && (
-              <Box px={2}>
-                <HStack justify="space-between" mb={1}>
-                  <Text fontSize="xs" color="gray.500">
-                    0:00
-                  </Text>
-                  <Text fontSize="xs" color="gray.500">
-                    {seconds(sourceDuration)}
-                  </Text>
-                </HStack>
-                <RangeSlider
-                  min={0}
-                  max={sourceDuration}
-                  step={0.001}
-                  value={[selectedOccurrence.start, selectedOccurrence.end]}
-                  onChange={([start, end]) =>
-                    updateOccurrence(selectedOccurrence.id, { start, end })
-                  }
-                  aria-label={["Trim start", "Trim end"]}
-                  colorScheme="blue"
-                >
-                  <RangeSliderTrack bg="gray.200">
-                    <RangeSliderFilledTrack />
-                  </RangeSliderTrack>
-                  <RangeSliderThumb index={0} aria-label="Trim start" />
-                  <RangeSliderThumb index={1} aria-label="Trim end" />
-                </RangeSlider>
-                <HStack justify="space-between" mt={1}>
-                  <Text fontSize="xs" color="blue.700">
-                    Start {seconds(selectedOccurrence.start)}
-                  </Text>
-                  <Text fontSize="xs" color="blue.700">
-                    End {seconds(selectedOccurrence.end)}
-                  </Text>
-                </HStack>
+          ) : (
+            <>
+              <Box bg="black" borderRadius="md" overflow="hidden">
+                <video
+                  ref={videoRef}
+                  controls
+                  preload="metadata"
+                  style={{ width: "100%", maxHeight: 420 }}
+                  onTimeUpdate={(event) => {
+                    if (
+                      selectedOccurrence &&
+                      event.currentTarget.currentTime >= selectedOccurrence.end
+                    )
+                      event.currentTarget.pause();
+                  }}
+                />
               </Box>
-            )}
-            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
-              <FormControl>
-                <FormLabel>Start (seconds)</FormLabel>
-                <Input
-                  type="number"
-                  min={0}
-                  max={sourceDuration ?? undefined}
-                  step={0.001}
-                  value={selectedOccurrence.start}
-                  onChange={(event) => updateTime("start", event.target.value)}
-                />
-              </FormControl>
-              <FormControl>
-                <FormLabel>End (seconds)</FormLabel>
-                <Input
-                  type="number"
-                  min={0.001}
-                  max={sourceDuration ?? undefined}
-                  step={0.001}
-                  value={selectedOccurrence.end}
-                  onChange={(event) => updateTime("end", event.target.value)}
-                />
-              </FormControl>
-            </SimpleGrid>
-            <HStack>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  updateTime(
-                    "start",
-                    String(
-                      videoRef.current?.currentTime ?? selectedOccurrence.start,
-                    ),
-                  )
-                }
-              >
-                Set start to playhead
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  updateTime(
-                    "end",
-                    String(
-                      videoRef.current?.currentTime ?? selectedOccurrence.end,
-                    ),
-                  )
-                }
-              >
-                Set end to playhead
-              </Button>
-            </HStack>
-            <FormControl>
-              <FormLabel>Label</FormLabel>
-              <Input
-                value={selectedOccurrence.label ?? ""}
-                onChange={(event) =>
-                  updateOccurrence(selectedOccurrence.id, {
-                    label: event.target.value,
-                  })
-                }
-                placeholder="Optional note"
-              />
-            </FormControl>
-          </>
-        )}
-      </VStack>
-
-      <VStack align="stretch" spacing={2} order={{ base: 0, xl: 1 }}>
-        <HStack justify="space-between">
-          <Heading size="md">Timeline</Heading>
-          <Text color="gray.600">{occurrences.length} occurrences</Text>
-        </HStack>
-        {!occurrences.length ? (
-          <Text color="gray.600">
-            Add source clips below to begin this edit.
-          </Text>
-        ) : (
-          occurrences.map((item, index) => (
-            <Box
-              key={item.id}
-              borderWidth="1px"
-              borderColor={item.id === selectedId ? "blue.500" : "gray.200"}
-              borderRadius="md"
-              bg="white"
-              px={3}
-              py={2}
-            >
-              <HStack justify="space-between" spacing={3}>
-                <Button
-                  variant="link"
-                  color="gray.900"
-                  whiteSpace="normal"
-                  height="auto"
-                  minWidth={0}
-                  textAlign="left"
-                  onClick={() => setSelectedId(item.id)}
-                >
-                  <HStack spacing={3} align="baseline">
-                    <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
-                      {index + 1}. {item.file.split("/").at(-1)}
+              <Text color="gray.600" overflowWrap="anywhere">
+                {selectedOccurrence.file}
+              </Text>
+              <HStack>
+                <Button leftIcon={<FiPlay />} onClick={playSelection}>
+                  Play selection
+                </Button>
+                <Text color="gray.600">
+                  {seconds(selectedOccurrence.end - selectedOccurrence.start)}
+                </Text>
+              </HStack>
+              {sourceDuration !== null && sourceDuration > 0 && (
+                <Box px={2}>
+                  <HStack justify="space-between" mb={1}>
+                    <Text fontSize="xs" color="gray.500">
+                      0:00
                     </Text>
-                    <Text fontSize="xs" color="gray.600" whiteSpace="nowrap">
-                      {seconds(item.start)} → {seconds(item.end)}
+                    <Text fontSize="xs" color="gray.500">
+                      {seconds(sourceDuration)}
                     </Text>
                   </HStack>
+                  <RangeSlider
+                    min={0}
+                    max={sourceDuration}
+                    step={0.001}
+                    value={[selectedOccurrence.start, selectedOccurrence.end]}
+                    onChange={([start, end]) =>
+                      updateOccurrence(selectedOccurrence.id, { start, end })
+                    }
+                    aria-label={["Trim start", "Trim end"]}
+                    colorScheme="blue"
+                  >
+                    <RangeSliderTrack bg="gray.200">
+                      <RangeSliderFilledTrack />
+                    </RangeSliderTrack>
+                    <RangeSliderThumb index={0} aria-label="Trim start" />
+                    <RangeSliderThumb index={1} aria-label="Trim end" />
+                  </RangeSlider>
+                  <HStack justify="space-between" mt={1}>
+                    <Text fontSize="xs" color="blue.700">
+                      Start {seconds(selectedOccurrence.start)}
+                    </Text>
+                    <Text fontSize="xs" color="blue.700">
+                      End {seconds(selectedOccurrence.end)}
+                    </Text>
+                  </HStack>
+                </Box>
+              )}
+              <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+                <FormControl>
+                  <FormLabel>Start (seconds)</FormLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={sourceDuration ?? undefined}
+                    step={0.001}
+                    value={selectedOccurrence.start}
+                    onChange={(event) =>
+                      updateTime("start", event.target.value)
+                    }
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel>End (seconds)</FormLabel>
+                  <Input
+                    type="number"
+                    min={0.001}
+                    max={sourceDuration ?? undefined}
+                    step={0.001}
+                    value={selectedOccurrence.end}
+                    onChange={(event) => updateTime("end", event.target.value)}
+                  />
+                </FormControl>
+              </SimpleGrid>
+              <HStack>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    updateTime(
+                      "start",
+                      String(
+                        videoRef.current?.currentTime ??
+                          selectedOccurrence.start,
+                      ),
+                    )
+                  }
+                >
+                  Set start to playhead
                 </Button>
-                <HStack spacing={0} flexShrink={0}>
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Duplicate occurrence"
-                    title="Duplicate occurrence"
-                    icon={<FiCopy />}
-                    onClick={() => duplicateOccurrence(item.id)}
-                  />
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Move to start"
-                    title="Move to start"
-                    icon={<FiChevronsUp />}
-                    onClick={() => moveOccurrence(item.id, "start")}
-                    isDisabled={index === 0}
-                  />
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Move earlier"
-                    title="Move earlier"
-                    icon={<FiArrowUp />}
-                    onClick={() => moveOccurrence(item.id, "earlier")}
-                    isDisabled={index === 0}
-                  />
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Move later"
-                    title="Move later"
-                    icon={<FiArrowDown />}
-                    onClick={() => moveOccurrence(item.id, "later")}
-                    isDisabled={index === occurrences.length - 1}
-                  />
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Move to end"
-                    title="Move to end"
-                    icon={<FiChevronsDown />}
-                    onClick={() => moveOccurrence(item.id, "end")}
-                    isDisabled={index === occurrences.length - 1}
-                  />
-                  <IconButton
-                    size="sm"
-                    colorScheme="red"
-                    variant="ghost"
-                    aria-label="Remove occurrence"
-                    title="Remove occurrence"
-                    icon={<FiTrash2 />}
-                    onClick={() => removeOccurrence(item.id, index)}
-                  />
-                </HStack>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    updateTime(
+                      "end",
+                      String(
+                        videoRef.current?.currentTime ?? selectedOccurrence.end,
+                      ),
+                    )
+                  }
+                >
+                  Set end to playhead
+                </Button>
               </HStack>
-            </Box>
-          ))
-        )}
-      </VStack>
+              <FormControl>
+                <FormLabel>Label</FormLabel>
+                <Input
+                  value={selectedOccurrence.label ?? ""}
+                  onChange={(event) =>
+                    updateOccurrence(selectedOccurrence.id, {
+                      label: event.target.value,
+                    })
+                  }
+                  placeholder="Optional note"
+                />
+              </FormControl>
+            </>
+          )}
+        </VStack>
+
+        <VStack align="stretch" spacing={2} order={{ base: 0, xl: 1 }}>
+          <HStack justify="space-between">
+            <Heading size="md">Timeline</Heading>
+            <Text color="gray.600">{occurrences.length} occurrences</Text>
+          </HStack>
+          {!occurrences.length ? (
+            <Text color="gray.600">
+              Add source clips below to begin this edit.
+            </Text>
+          ) : (
+            occurrences.map((item, index) => (
+              <Box
+                key={item.id}
+                borderWidth="1px"
+                borderColor={item.id === selectedId ? "blue.500" : "gray.200"}
+                borderRadius="md"
+                bg="white"
+                px={3}
+                py={2}
+              >
+                <HStack justify="space-between" spacing={3}>
+                  <Button
+                    variant="link"
+                    color="gray.900"
+                    whiteSpace="normal"
+                    height="auto"
+                    minWidth={0}
+                    textAlign="left"
+                    onClick={() => setSelectedId(item.id)}
+                  >
+                    <HStack spacing={3} align="baseline">
+                      <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
+                        {index + 1}. {item.file.split("/").at(-1)}
+                      </Text>
+                      <Text fontSize="xs" color="gray.600" whiteSpace="nowrap">
+                        {seconds(item.start)} → {seconds(item.end)}
+                      </Text>
+                    </HStack>
+                  </Button>
+                  <HStack spacing={0} flexShrink={0}>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Duplicate occurrence"
+                      title="Duplicate occurrence"
+                      icon={<FiCopy />}
+                      onClick={() => duplicateOccurrence(item.id)}
+                    />
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Move to start"
+                      title="Move to start"
+                      icon={<FiChevronsUp />}
+                      onClick={() => moveOccurrence(item.id, "start")}
+                      isDisabled={index === 0}
+                    />
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Move earlier"
+                      title="Move earlier"
+                      icon={<FiArrowUp />}
+                      onClick={() => moveOccurrence(item.id, "earlier")}
+                      isDisabled={index === 0}
+                    />
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Move later"
+                      title="Move later"
+                      icon={<FiArrowDown />}
+                      onClick={() => moveOccurrence(item.id, "later")}
+                      isDisabled={index === occurrences.length - 1}
+                    />
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Move to end"
+                      title="Move to end"
+                      icon={<FiChevronsDown />}
+                      onClick={() => moveOccurrence(item.id, "end")}
+                      isDisabled={index === occurrences.length - 1}
+                    />
+                    <IconButton
+                      size="sm"
+                      colorScheme="red"
+                      variant="ghost"
+                      aria-label="Remove occurrence"
+                      title="Remove occurrence"
+                      icon={<FiTrash2 />}
+                      onClick={() => removeOccurrence(item.id, index)}
+                    />
+                  </HStack>
+                </HStack>
+              </Box>
+            ))
+          )}
+        </VStack>
       </SimpleGrid>
       <Divider />
       <HStack justify="space-between" align="end" flexWrap="wrap">
         <Box>
           <Heading size="md">Source clips</Heading>
-          <Text color="gray.600">Each add creates a separate timeline occurrence.</Text>
+          <Text color="gray.600">
+            Each add creates a separate timeline occurrence.
+          </Text>
         </Box>
         <Button
           leftIcon={<FiPlus />}

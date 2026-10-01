@@ -55,12 +55,12 @@ export function ClipBrowser(props: ClipBrowserProps) {
     Promise.all([
       getClips(projectId, controller.signal),
       getProject(projectId, controller.signal),
-    ]).then(
-      ([clips, project]) => {
+    ])
+      .then(([clips, project]) => {
         if (!controller.signal.aborted)
           setResult({ projectId, clips, clipsDirectory: project.paths.clips });
-      },
-    ).catch((error) => {
+      })
+      .catch((error) => {
         if (!controller.signal.aborted)
           setResult({
             projectId,
@@ -166,20 +166,44 @@ export function ClipBrowser(props: ClipBrowserProps) {
         isOpen={isOpen}
         onClose={closePreview}
         title={previewClip?.name ?? "Clip preview"}
-        videoUrl={previewClip
-          ? getMediaUrl(projectId, clipsRelativePath(previewClip.path, result.clipsDirectory ?? "clips"))
-          : ""}
-        metadata={previewClip && <>
-          <Text fontWeight="semibold">
-            {previewClip.duration === null
-              ? "Duration unavailable"
-              : `${Math.floor(previewClip.duration / 60)}:${String(Math.floor(previewClip.duration % 60)).padStart(2, "0")}`}
-          </Text>
-          {previewClip.width && previewClip.height && <Text color="gray.600">{previewClip.width} × {previewClip.height}</Text>}
-          {previewClip.fps && <Text color="gray.600">{previewClip.fps} fps</Text>}
-          {previewClip.creation_time && <Text color="gray.600">{previewClip.creation_time.replace("T", " ")}</Text>}
-          <Text fontSize="sm" color="gray.500" overflowWrap="anywhere">{previewClip.path}</Text>
-        </>}
+        videoUrl={
+          previewClip
+            ? getMediaUrl(
+                projectId,
+                clipsRelativePath(
+                  previewClip.path,
+                  result.clipsDirectory ?? "clips",
+                ),
+              )
+            : ""
+        }
+        metadata={
+          previewClip && (
+            <>
+              <Text fontWeight="semibold">
+                {previewClip.duration === null
+                  ? "Duration unavailable"
+                  : `${Math.floor(previewClip.duration / 60)}:${String(Math.floor(previewClip.duration % 60)).padStart(2, "0")}`}
+              </Text>
+              {previewClip.width && previewClip.height && (
+                <Text color="gray.600">
+                  {previewClip.width} × {previewClip.height}
+                </Text>
+              )}
+              {previewClip.fps && (
+                <Text color="gray.600">{previewClip.fps} fps</Text>
+              )}
+              {previewClip.creation_time && (
+                <Text color="gray.600">
+                  {previewClip.creation_time.replace("T", " ")}
+                </Text>
+              )}
+              <Text fontSize="sm" color="gray.500" overflowWrap="anywhere">
+                {previewClip.path}
+              </Text>
+            </>
+          )
+        }
       />
     </VStack>
   );

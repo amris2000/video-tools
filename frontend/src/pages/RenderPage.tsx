@@ -104,7 +104,8 @@ export function RenderPage() {
       jobStartedAt === null ||
       !jobStatus ||
       !["queued", "running"].includes(jobStatus)
-    ) return;
+    )
+      return;
     const updateElapsed = () => {
       setElapsedSeconds(Math.floor((Date.now() - jobStartedAt) / 1000));
     };
@@ -237,7 +238,8 @@ export function RenderPage() {
             {completed && <Text>{job.output_filename}</Text>}
             {running && (
               <Text fontSize="sm">
-                Elapsed: {formatElapsed(elapsedSeconds)} · This operation continues in the local application process.
+                Elapsed: {formatElapsed(elapsedSeconds)} · This operation
+                continues in the local application process.
               </Text>
             )}
           </VStack>

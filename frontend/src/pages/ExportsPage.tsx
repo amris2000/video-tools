@@ -79,18 +79,38 @@ function ExportSection({
               borderRadius="md"
               overflow="hidden"
               onClick={() => onSelect(file, social)}
-              _hover={{ borderColor: "blue.400", transform: "translateY(-1px)" }}
+              _hover={{
+                borderColor: "blue.400",
+                transform: "translateY(-1px)",
+              }}
               _active={{ transform: "none" }}
             >
               <AspectRatio ratio={16 / 10} bg="gray.900">
-                <Stack color="white" align="center" justify="center" spacing={2}>
+                <Stack
+                  color="white"
+                  align="center"
+                  justify="center"
+                  spacing={2}
+                >
                   <FiPlayCircle size={34} />
-                  <Text fontSize="sm">Preview {social ? "social export" : "render"}</Text>
+                  <Text fontSize="sm">
+                    Preview {social ? "social export" : "render"}
+                  </Text>
                 </Stack>
               </AspectRatio>
               <Stack p={3} spacing={1} align="stretch">
-                <Text fontSize="sm" fontWeight="semibold" overflowWrap="anywhere" noOfLines={2}>{file.filename}</Text>
-                <Text fontSize="xs" color="gray.600">{formatSize(file.size_bytes)} · {new Date(file.modified_at).toLocaleString()}</Text>
+                <Text
+                  fontSize="sm"
+                  fontWeight="semibold"
+                  overflowWrap="anywhere"
+                  noOfLines={2}
+                >
+                  {file.filename}
+                </Text>
+                <Text fontSize="xs" color="gray.600">
+                  {formatSize(file.size_bytes)} ·{" "}
+                  {new Date(file.modified_at).toLocaleString()}
+                </Text>
               </Stack>
             </Button>
           ))}
@@ -118,7 +138,10 @@ export function ExportsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [preview, setPreview] = useState<{ file: ExportFile; social: boolean } | null>(null);
+  const [preview, setPreview] = useState<{
+    file: ExportFile;
+    social: boolean;
+  } | null>(null);
   const jobId = job?.job_id;
   const jobStatus = job?.status;
 
@@ -393,12 +416,30 @@ export function ExportsPage() {
         isOpen={preview !== null}
         onClose={() => setPreview(null)}
         title={preview?.file.filename ?? "Export preview"}
-        videoUrl={preview ? getExportUrl(activeProjectId, preview.file.filename, preview.social) : ""}
-        metadata={preview && <>
-          <Text fontWeight="semibold">{preview.social ? "Social export" : "Normal render"}</Text>
-          <Text color="gray.600">{formatSize(preview.file.size_bytes)}</Text>
-          <Text color="gray.600">{new Date(preview.file.modified_at).toLocaleString()}</Text>
-        </>}
+        videoUrl={
+          preview
+            ? getExportUrl(
+                activeProjectId,
+                preview.file.filename,
+                preview.social,
+              )
+            : ""
+        }
+        metadata={
+          preview && (
+            <>
+              <Text fontWeight="semibold">
+                {preview.social ? "Social export" : "Normal render"}
+              </Text>
+              <Text color="gray.600">
+                {formatSize(preview.file.size_bytes)}
+              </Text>
+              <Text color="gray.600">
+                {new Date(preview.file.modified_at).toLocaleString()}
+              </Text>
+            </>
+          )
+        }
       />
     </VStack>
   );

@@ -54,17 +54,35 @@ export function VideoPreviewModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} size="6xl" isCentered scrollBehavior="inside">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      size="6xl"
+      isCentered
+      scrollBehavior="inside"
+    >
       <ModalOverlay />
-      <ModalContent maxW={{ base: "calc(100vw - 24px)", xl: "1400px" }} maxH="calc(100vh - 32px)">
+      <ModalContent
+        maxW={{ base: "calc(100vw - 24px)", xl: "1400px" }}
+        maxH="calc(100vh - 32px)"
+      >
         <ModalHeader pr={12}>{title}</ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={6}>
           <Stack spacing={4}>
-            <AspectRatio ratio={16 / 9} bg="black" borderRadius="md" overflow="hidden">
+            <AspectRatio
+              ratio={16 / 9}
+              bg="black"
+              borderRadius="md"
+              overflow="hidden"
+            >
               <video ref={videoRef} controls preload="metadata" />
             </AspectRatio>
-            {metadata && <HStack spacing={4} flexWrap="wrap">{metadata}</HStack>}
+            {metadata && (
+              <HStack spacing={4} flexWrap="wrap">
+                {metadata}
+              </HStack>
+            )}
           </Stack>
         </ModalBody>
       </ModalContent>
