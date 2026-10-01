@@ -149,7 +149,10 @@ export function importGoProFiles(
 ) {
   return api<ImportResult>(`${projectPath(projectId)}/imports`, {
     method: "POST",
-    body: JSON.stringify({ source_path: sourcePath, selected_paths: selectedPaths }),
+    body: JSON.stringify({
+      source_path: sourcePath,
+      selected_paths: selectedPaths,
+    }),
   });
 }
 

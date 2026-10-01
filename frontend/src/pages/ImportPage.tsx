@@ -58,13 +58,26 @@ export function ImportPage() {
     setError("");
     setResult(null);
     try {
-      const nextPlan = await scanGoProImport(activeProjectId, sourcePath.trim());
+      const nextPlan = await scanGoProImport(
+        activeProjectId,
+        sourcePath.trim(),
+      );
       setPlan(nextPlan);
       setSourcePath(nextPlan.source);
-      setSelectedPaths(new Set(nextPlan.files.filter((file) => file.status === "new").map((file) => file.source_relative_path)));
+      setSelectedPaths(
+        new Set(
+          nextPlan.files
+            .filter((file) => file.status === "new")
+            .map((file) => file.source_relative_path),
+        ),
+      );
     } catch (reason) {
       setPlan(null);
-      setError(reason instanceof Error ? reason.message : "Could not scan this GoPro folder.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not scan this GoPro folder.",
+      );
     } finally {
       setBusy(null);
     }
@@ -75,13 +88,27 @@ export function ImportPage() {
     setBusy("import");
     setError("");
     try {
-      const importResult = await importGoProFiles(activeProjectId, plan.source, [...selectedPaths]);
+      const importResult = await importGoProFiles(
+        activeProjectId,
+        plan.source,
+        [...selectedPaths],
+      );
       setResult(importResult);
       const refreshedPlan = await scanGoProImport(activeProjectId, plan.source);
       setPlan(refreshedPlan);
-      setSelectedPaths(new Set(refreshedPlan.files.filter((file) => file.status === "new").map((file) => file.source_relative_path)));
+      setSelectedPaths(
+        new Set(
+          refreshedPlan.files
+            .filter((file) => file.status === "new")
+            .map((file) => file.source_relative_path),
+        ),
+      );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not import selected videos.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not import selected videos.",
+      );
     } finally {
       setBusy(null);
     }
@@ -97,24 +124,46 @@ export function ImportPage() {
   }
 
   function selectAllNew() {
-    setSelectedPaths(new Set(plan?.files.filter((file) => file.status === "new").map((file) => file.source_relative_path) ?? []));
+    setSelectedPaths(
+      new Set(
+        plan?.files
+          .filter((file) => file.status === "new")
+          .map((file) => file.source_relative_path) ?? [],
+      ),
+    );
   }
 
   return (
     <VStack align="stretch" spacing={5}>
       <Box>
         <Heading size="lg">Import</Heading>
-        <Text color="gray.600">Scan a GoPro folder and copy new videos into this project.</Text>
+        <Text color="gray.600">
+          Scan a GoPro folder and copy new videos into this project.
+        </Text>
       </Box>
 
-      {error && <Alert status="error"><AlertIcon />{error}</Alert>}
-      {result && <Alert status={result.errors.length ? "warning" : "success"}>
-        <AlertIcon />
-        <VStack align="start" spacing={1}>
-          <Text>Imported {result.imported}; skipped {result.skipped}; conflicts/errors {result.conflicts}.</Text>
-          {result.errors.map((message, index) => <Text key={`${index}-${message}`} fontSize="sm">{message}</Text>)}
-        </VStack>
-      </Alert>}
+      {error && (
+        <Alert status="error">
+          <AlertIcon />
+          {error}
+        </Alert>
+      )}
+      {result && (
+        <Alert status={result.errors.length ? "warning" : "success"}>
+          <AlertIcon />
+          <VStack align="start" spacing={1}>
+            <Text>
+              Imported {result.imported}; skipped {result.skipped};
+              conflicts/errors {result.conflicts}.
+            </Text>
+            {result.errors.map((message, index) => (
+              <Text key={`${index}-${message}`} fontSize="sm">
+                {message}
+              </Text>
+            ))}
+          </VStack>
+        </Alert>
+      )}
 
       <Box as="form" onSubmit={(event: FormEvent) => void handleScan(event)}>
         <HStack align="end" spacing={3} flexWrap="wrap">
@@ -131,69 +180,137 @@ export function ImportPage() {
               placeholder="C:\\ or /media/card/DCIM"
             />
           </FormControl>
-          <Button type="submit" colorScheme="blue" isLoading={busy === "scan"} isDisabled={!sourcePath.trim() || busy !== null}>
+          <Button
+            type="submit"
+            colorScheme="blue"
+            isLoading={busy === "scan"}
+            isDisabled={!sourcePath.trim() || busy !== null}
+          >
             Scan folder
           </Button>
         </HStack>
       </Box>
 
-      {busy === "scan" && <HStack role="status"><Spinner size="sm" /><Text>Scanning GoPro videos…</Text></HStack>}
-
-      {plan && <>
-        <HStack spacing={5} flexWrap="wrap" aria-label="Import scan summary">
-          <Text fontWeight="semibold">{plan.total_source_files} source videos</Text>
-          <Text color="green.700">{plan.new_files} new</Text>
-          <Text color="gray.600">{plan.already_imported} already imported</Text>
-          <Text color={plan.conflicts ? "orange.700" : "gray.600"}>{plan.conflicts} conflicts</Text>
+      {busy === "scan" && (
+        <HStack role="status">
+          <Spinner size="sm" />
+          <Text>Scanning GoPro videos…</Text>
         </HStack>
+      )}
 
-        <HStack justify="space-between" flexWrap="wrap">
-          <HStack>
-            <Button size="sm" onClick={selectAllNew} isDisabled={!plan.new_files || busy !== null}>Select all new</Button>
-            <Button size="sm" variant="outline" onClick={() => setSelectedPaths(new Set())} isDisabled={!selectedPaths.size || busy !== null}>Select none</Button>
+      {plan && (
+        <>
+          <HStack spacing={5} flexWrap="wrap" aria-label="Import scan summary">
+            <Text fontWeight="semibold">
+              {plan.total_source_files} source videos
+            </Text>
+            <Text color="green.700">{plan.new_files} new</Text>
+            <Text color="gray.600">
+              {plan.already_imported} already imported
+            </Text>
+            <Text color={plan.conflicts ? "orange.700" : "gray.600"}>
+              {plan.conflicts} conflicts
+            </Text>
           </HStack>
-          <Button colorScheme="blue" onClick={() => void handleImport()} isLoading={busy === "import"} isDisabled={!selectedPaths.size || busy !== null}>
-            Import selected ({selectedPaths.size})
-          </Button>
-        </HStack>
 
-        <TableContainer borderWidth="1px" borderColor="gray.200" borderRadius="md" bg="white">
-          <Table size="sm">
-            <Thead>
-              <Tr>
-                <Th width="40px">Select</Th>
-                <Th>Filename</Th>
-                <Th>Source path</Th>
-                <Th isNumeric>Size</Th>
-                <Th>Status</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {plan.files.map((file) => (
-                <Tr key={file.source_relative_path}>
-                  <Td>
-                    <Checkbox
-                      aria-label={`Select ${file.filename}`}
-                      isChecked={selectedPaths.has(file.source_relative_path)}
-                      isDisabled={file.status !== "new" || busy !== null}
-                      onChange={(event) => updateSelection(file.source_relative_path, event.target.checked)}
-                    />
-                  </Td>
-                  <Td fontWeight="medium">{file.filename}</Td>
-                  <Td><Text fontSize="xs" color="gray.600" overflowWrap="anywhere">{file.source_relative_path}</Text></Td>
-                  <Td isNumeric whiteSpace="nowrap">{formatSize(file.size_bytes)}</Td>
-                  <Td>
-                    <Badge colorScheme={file.status === "new" ? "green" : file.status === "conflict" ? "orange" : "gray"}>
-                      {statusLabels[file.status]}
-                    </Badge>
-                  </Td>
+          <HStack justify="space-between" flexWrap="wrap">
+            <HStack>
+              <Button
+                size="sm"
+                onClick={selectAllNew}
+                isDisabled={!plan.new_files || busy !== null}
+              >
+                Select all new
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedPaths(new Set())}
+                isDisabled={!selectedPaths.size || busy !== null}
+              >
+                Select none
+              </Button>
+            </HStack>
+            <Button
+              colorScheme="blue"
+              onClick={() => void handleImport()}
+              isLoading={busy === "import"}
+              isDisabled={!selectedPaths.size || busy !== null}
+            >
+              Import selected ({selectedPaths.size})
+            </Button>
+          </HStack>
+
+          <TableContainer
+            borderWidth="1px"
+            borderColor="gray.200"
+            borderRadius="md"
+            bg="white"
+          >
+            <Table size="sm">
+              <Thead>
+                <Tr>
+                  <Th width="40px">Select</Th>
+                  <Th>Filename</Th>
+                  <Th>Source path</Th>
+                  <Th isNumeric>Size</Th>
+                  <Th>Status</Th>
                 </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        </TableContainer>
-        {!plan.files.length && <Text color="gray.600">No supported GoPro videos found in this folder.</Text>}
-      </>}
+              </Thead>
+              <Tbody>
+                {plan.files.map((file) => (
+                  <Tr key={file.source_relative_path}>
+                    <Td>
+                      <Checkbox
+                        aria-label={`Select ${file.filename}`}
+                        isChecked={selectedPaths.has(file.source_relative_path)}
+                        isDisabled={file.status !== "new" || busy !== null}
+                        onChange={(event) =>
+                          updateSelection(
+                            file.source_relative_path,
+                            event.target.checked,
+                          )
+                        }
+                      />
+                    </Td>
+                    <Td fontWeight="medium">{file.filename}</Td>
+                    <Td>
+                      <Text
+                        fontSize="xs"
+                        color="gray.600"
+                        overflowWrap="anywhere"
+                      >
+                        {file.source_relative_path}
+                      </Text>
+                    </Td>
+                    <Td isNumeric whiteSpace="nowrap">
+                      {formatSize(file.size_bytes)}
+                    </Td>
+                    <Td>
+                      <Badge
+                        colorScheme={
+                          file.status === "new"
+                            ? "green"
+                            : file.status === "conflict"
+                              ? "orange"
+                              : "gray"
+                        }
+                      >
+                        {statusLabels[file.status]}
+                      </Badge>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </TableContainer>
+          {!plan.files.length && (
+            <Text color="gray.600">
+              No supported GoPro videos found in this folder.
+            </Text>
+          )}
+        </>
+      )}
     </VStack>
   );
 }

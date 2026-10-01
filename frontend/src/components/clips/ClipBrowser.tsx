@@ -41,8 +41,7 @@ export function ClipBrowser(props: ClipBrowserProps) {
     const controller = new AbortController();
     getClips(projectId, controller.signal)
       .then((clips) => {
-        if (!controller.signal.aborted)
-          setResult({ projectId, clips });
+        if (!controller.signal.aborted) setResult({ projectId, clips });
       })
       .catch((error) => {
         if (!controller.signal.aborted)
@@ -151,9 +150,7 @@ export function ClipBrowser(props: ClipBrowserProps) {
         onClose={closePreview}
         title={previewClip?.name ?? "Clip preview"}
         videoUrl={
-          previewClip
-            ? getMediaUrl(projectId, previewClip.media_path)
-            : ""
+          previewClip ? getMediaUrl(projectId, previewClip.media_path) : ""
         }
         metadata={
           previewClip && (

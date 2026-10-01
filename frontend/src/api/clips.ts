@@ -15,5 +15,8 @@ export interface Clip {
 }
 
 export function getClips(projectId: string, signal?: AbortSignal) {
-  return api<Clip[]>("/api/projects/" + encodeURIComponent(projectId) + "/clips", { signal });
+  return api<Clip[]>(
+    "/api/projects/" + encodeURIComponent(projectId) + "/clips",
+    { signal },
+  );
 }
