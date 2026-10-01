@@ -17,8 +17,8 @@ from videotools.services.edits import (
     rename_edit,
     save_edit,
 )
-from videotools.services.jobs import JobInProgressError, get_job
-from videotools.services.imports import create_import_plan, import_selected_files
+from videotools.services.jobs import JobInProgressError, get_job, start_progress_job
+from videotools.services.imports import create_import_plan, run_import_pipeline
 from videotools.services.media import (
     parse_byte_range,
     resolve_export_video,
@@ -190,19 +190,30 @@ def scan_project_import(
         _raise_service_error(error)
 
 
-@router.post("/{project_id}/imports", response_model=ImportResultResponse)
+@router.post(
+    "/{project_id}/imports",
+    response_model=MediaJobResponse,
+    status_code=202,
+)
 def import_project_files(
     project_id: str,
     request: ImportExecuteRequest,
-) -> dict:
+) -> MediaJobResponse:
     try:
-        return import_selected_files(
-            _project(project_id),
-            request.source_path,
-            request.selected_paths,
+        project = _project(project_id)
+        job = start_progress_job(
+            project_id,
+            "import",
+            lambda update: run_import_pipeline(
+                project,
+                request.source_path,
+                request.selected_paths,
+                update,
+            ),
         )
     except Exception as error:
         _raise_service_error(error)
+    return _job_response(job)
 
 
 @router.post("/{project_id}/renders", response_model=MediaJobResponse, status_code=202)

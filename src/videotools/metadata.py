@@ -1,8 +1,9 @@
 from collections import Counter
 from pathlib import Path
+from typing import Callable, Iterable
 
 from videotools.journal import load_journal
-from videotools.project import load_project_config
+from videotools.project import VideoProject, load_project_config
 from videotools.report import generate_html_report
 from videotools.thumbnails import thumbnail_name
 from datetime import datetime, timedelta
@@ -273,18 +274,22 @@ def load_existing_report(
 def analyze_project(
     project_root: Path,
     force: bool = False,
+    *,
+    project: VideoProject | None = None,
+    clip_paths: Iterable[Path] | None = None,
+    progress_callback: Callable[[dict], None] | None = None,
 ) -> dict:
-    project_root = Path(project_root).resolve()
+    project_root = (project.root if project else Path(project_root)).resolve()
 
-    config = load_project_config(project_root)
+    config = project.config if project else load_project_config(project_root)
 
     timezone_name = config.get(
         "timezone",
         "Europe/Copenhagen",
     )
 
-    clips_dir = project_root / "clips"
-    metadata_dir = project_root / "metadata"
+    clips_dir = project.clips_dir if project else project_root / "clips"
+    metadata_dir = project.metadata_dir if project else project_root / "metadata"
 
     report_file = metadata_dir / "clip_report.json"
 
@@ -308,7 +313,7 @@ def analyze_project(
 
     html_report_file = metadata_dir / "clip_report.html"
 
-    journal_file = project_root / "journal.json"
+    journal_file = project.journal_file if project else project_root / "journal.json"
     journal = load_journal(journal_file)
 
     if not clips_dir.exists():
@@ -316,7 +321,7 @@ def analyze_project(
             f"Clips directory does not exist: {clips_dir}"
         )
 
-    metadata_dir.mkdir(exist_ok=True)
+    metadata_dir.mkdir(parents=True, exist_ok=True)
 
     # Recursive search so clips/20260907/*.MP4 also works.
     clips = sorted(
@@ -326,14 +331,49 @@ def analyze_project(
         and path.suffix.lower() in VIDEO_EXTENSIONS
     )
 
+    selected_paths = (
+        {Path(path).resolve() for path in clip_paths}
+        if clip_paths is not None
+        else None
+    )
+    if selected_paths is not None:
+        clips = [path for path in clips if path.resolve() in selected_paths]
+
     if not clips:
         raise RuntimeError(
             f"No video clips found in {clips_dir}"
         )
 
-    report_clips = []
+    selected_relative_paths = {
+        path.relative_to(project_root).as_posix()
+        for path in selected_paths or ()
+        if path.is_relative_to(project_root)
+    }
+    report_clips = (
+        [
+            clip.copy()
+            for clip in existing_clips.values()
+            if clip.get("relative_path") not in selected_relative_paths
+        ]
+        if selected_paths is not None
+        else []
+    )
+    progress_errors = []
+
+    def report_progress(status: str, clip: Path, completed: int, error: str | None = None) -> None:
+        if progress_callback is not None:
+            progress_callback({
+                "status": status,
+                "current_file": clip.name,
+                "completed": completed,
+                "total": len(clips),
+                "error": error,
+            })
+            if error:
+                progress_errors.append(f"{clip.name}: {error}")
 
     for index, clip in enumerate(clips, start=1):
+        report_progress("running", clip, index - 1)
         relative_path = clip.relative_to(
             project_root
         ).as_posix()
@@ -362,22 +402,21 @@ def analyze_project(
                 project_root,
             )
 
-            thumbnail_file = (
-                project_root
-                / "metadata"
-                / "thumbnails"
-                / thumbnail_filename
-            )
+            thumbnail_file = metadata_dir / "thumbnails" / thumbnail_filename
+            thumbnail_relative = (
+                metadata_dir.relative_to(project_root) / "thumbnails" / thumbnail_filename
+            ).as_posix()
 
             cached_clip = existing_clip.copy()
 
             cached_clip["thumbnail"] = (
-                f"metadata/thumbnails/{thumbnail_filename}"
+                thumbnail_relative
                 if thumbnail_file.exists()
                 else None
             )
 
             report_clips.append(cached_clip)
+            report_progress("completed", clip, index)
 
             continue
 
@@ -400,6 +439,12 @@ def analyze_project(
         except subprocess.CalledProcessError as error:
             print(f"WARNING: ffprobe failed for {clip}")
             print(error.stderr)
+            report_progress("failed", clip, index, str(error.stderr).strip() or str(error))
+            continue
+        except Exception as error:
+            if progress_callback is None:
+                raise
+            report_progress("failed", clip, index, str(error))
             continue
 
         video_stream = next(
@@ -422,6 +467,7 @@ def analyze_project(
 
         if video_stream is None:
             print(f"Skipping {clip.name}: no video stream")
+            report_progress("failed", clip, index, "No video stream found.")
             continue
 
         fps = parse_fps(
@@ -460,12 +506,10 @@ def analyze_project(
             project_root,
         )
 
-        thumbnail_file = (
-            project_root
-            / "metadata"
-            / "thumbnails"
-            / thumbnail_filename
-        )
+        thumbnail_file = metadata_dir / "thumbnails" / thumbnail_filename
+        thumbnail_relative = (
+            metadata_dir.relative_to(project_root) / "thumbnails" / thumbnail_filename
+        ).as_posix()
 
         clip_info = {
             "name": clip.name,
@@ -473,7 +517,7 @@ def analyze_project(
 
             "relative_path": relative_path,
             "thumbnail": (
-                f"metadata/thumbnails/{thumbnail_filename}"
+                thumbnail_relative
                 if thumbnail_file.exists()
                 else None
             ),
@@ -531,8 +575,9 @@ def analyze_project(
             }
 
         report_clips.append(clip_info)
+        report_progress("completed", clip, index)
 
-    if not report_clips:
+    if not report_clips and selected_paths is None:
         raise RuntimeError(
             "No usable video clips found."
         )

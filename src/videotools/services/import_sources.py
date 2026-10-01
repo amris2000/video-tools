@@ -9,6 +9,11 @@ import platform
 import re
 
 from videotools.media import VIDEO_EXTENSIONS
+from videotools.services.gopro_camera import (
+    discover_windows_usb_camera_urls,
+    list_camera_media,
+    read_camera_info,
+)
 
 _GOPRO_FILENAME = re.compile(r"^(?:GOPR|GP|GX|GH)\d{4,8}(?:_\d+)?$", re.IGNORECASE)
 _MAX_DCIM_CHILDREN = 64
@@ -49,6 +54,21 @@ def discover_import_sources() -> list[DetectedImportSource]:
             )
         except OSError:
             continue
+    if system == "Windows":
+        for base_url in discover_windows_usb_camera_urls():
+            try:
+                info = read_camera_info(base_url)
+                media = list_camera_media(base_url)
+            except (OSError, ValueError, TimeoutError):
+                continue
+            model = str(info.get("model_name", "GoPro"))
+            video_count = len(media)
+            detected[base_url.casefold()] = DetectedImportSource(
+                path=base_url,
+                label=f"GoPro {model} (USB)",
+                source_type="gopro_usb",
+                reason=f"Open GoPro USB connection; {video_count} videos listed.",
+            )
     return sorted(detected.values(), key=lambda item: item.path.casefold())
 
 

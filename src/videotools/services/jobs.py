@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import Callable
+from typing import Any, Callable
 from uuid import uuid4
 
 
@@ -20,6 +20,8 @@ class MediaJob:
     status: str = "queued"
     output_filename: str | None = None
     error: str | None = None
+    progress: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
 
 
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="video-tools-media")
@@ -53,6 +55,29 @@ def get_job(project_id: str, job_id: str) -> MediaJob | None:
         return _copy_job(job)
 
 
+def start_progress_job(
+    project_id: str,
+    kind: str,
+    action: Callable[[Callable[[dict[str, Any]], None]], dict[str, Any]],
+) -> MediaJob:
+    with _lock:
+        if any(
+            job.status in {"queued", "running"}
+            for job in _jobs.values()
+        ):
+            raise JobInProgressError("Another media operation is already in progress.")
+
+        job = MediaJob(
+            job_id=uuid4().hex,
+            project_id=project_id,
+            kind=kind,
+            progress=None,
+        )
+        _jobs[job.job_id] = job
+        _executor.submit(_run_progress_job, job.job_id, action)
+        return _copy_job(job)
+
+
 def _run_job(job_id: str, action: Callable[[], Path]) -> None:
     with _lock:
         job = _jobs[job_id]
@@ -70,6 +95,34 @@ def _run_job(job_id: str, action: Callable[[], Path]) -> None:
             job.output_filename = output.name
 
 
+def _run_progress_job(
+    job_id: str,
+    action: Callable[[Callable[[dict[str, Any]], None]], dict[str, Any]],
+) -> None:
+    with _lock:
+        job = _jobs[job_id]
+        job.status = "running"
+
+    def update_progress(progress: dict[str, Any]) -> None:
+        with _lock:
+            _jobs[job_id].progress = progress
+
+    try:
+        result = action(update_progress)
+    except Exception as error:
+        with _lock:
+            job = _jobs[job_id]
+            job.status = "failed"
+            job.error = str(error) or error.__class__.__name__
+    else:
+        with _lock:
+            job = _jobs[job_id]
+            job.status = "completed"
+            job.result = result
+            if result.get("errors"):
+                job.error = f"{len(result['errors'])} import processing error(s)."
+
+
 def _copy_job(job: MediaJob) -> MediaJob:
     return MediaJob(
         job_id=job.job_id,
@@ -78,4 +131,6 @@ def _copy_job(job: MediaJob) -> MediaJob:
         status=job.status,
         output_filename=job.output_filename,
         error=job.error,
+        progress=job.progress.copy() if job.progress is not None else None,
+        result=job.result.copy() if job.result is not None else None,
     )

@@ -26,10 +26,29 @@ export interface EditResponse {
 export interface MediaJob {
   job_id: string;
   project_id: string;
-  kind: "render" | "social_export";
+  kind: "render" | "social_export" | "import";
   status: "queued" | "running" | "completed" | "failed";
   output_filename: string | null;
   error: string | null;
+  progress?: ImportJobProgress | null;
+  result?: ImportResult | null;
+}
+
+export interface ImportStageProgress {
+  status: "waiting" | "running" | "completed" | "failed";
+  current_file: string | null;
+  completed: number;
+  total: number;
+  errors: string[];
+}
+
+export interface ImportJobProgress {
+  stage: "import" | "thumbnails" | "probe" | null;
+  stages: {
+    import: ImportStageProgress;
+    thumbnails: ImportStageProgress;
+    probe: ImportStageProgress;
+  };
 }
 
 export interface ExportFile {
@@ -133,12 +152,13 @@ export interface ImportResult {
   skipped: number;
   conflicts: number;
   errors: string[];
+  everything_up_to_date?: boolean;
 }
 
 export interface DetectedImportSource {
   path: string;
   label: string;
-  source_type: "gopro";
+  source_type: "gopro" | "gopro_usb";
   reason: string;
 }
 
@@ -158,7 +178,7 @@ export function importGoProFiles(
   sourcePath: string,
   selectedPaths: string[],
 ) {
-  return api<ImportResult>(`${projectPath(projectId)}/imports`, {
+  return api<MediaJob>(`${projectPath(projectId)}/imports`, {
     method: "POST",
     body: JSON.stringify({
       source_path: sourcePath,

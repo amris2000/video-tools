@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
 
@@ -109,6 +109,8 @@ class MediaJobResponse(BaseModel):
     status: Literal["queued", "running", "completed", "failed"]
     output_filename: str | None = None
     error: str | None = None
+    progress: dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
 
 
 class ExportEntryResponse(BaseModel):
@@ -174,5 +176,5 @@ class ImportResultResponse(BaseModel):
 class DetectedImportSourceResponse(BaseModel):
     path: str
     label: str
-    source_type: Literal["gopro"]
+    source_type: Literal["gopro", "gopro_usb"]
     reason: str
