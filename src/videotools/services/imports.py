@@ -6,7 +6,7 @@ import os
 import shutil
 from typing import Any, Callable
 
-from videotools.metadata import analyze_project, load_existing_report
+from videotools.metadata import load_existing_report, probe_clips_incrementally
 from videotools.media import VIDEO_EXTENSIONS
 from videotools.project import VideoProject
 from videotools.services.gopro import discover_gopro_videos
@@ -206,8 +206,10 @@ def run_import_pipeline(
         update_progress(deepcopy(progress))
 
     def add_error(stage_name: str, message: str) -> None:
-        errors.append(message)
-        stages[stage_name]["errors"].append(message)
+        if message not in errors:
+            errors.append(message)
+        if message not in stages[stage_name]["errors"]:
+            stages[stage_name]["errors"].append(message)
 
     selected: list[tuple[str, dict[str, Any]]] = []
     for value in dict.fromkeys(selected_paths):
@@ -330,12 +332,13 @@ def run_import_pipeline(
             publish()
 
         try:
-            analyze_project(
-                project.root,
-                project=project,
-                clip_paths=probe_work,
+            probe_result = probe_clips_incrementally(
+                project,
+                probe_work,
                 progress_callback=probe_progress,
             )
+            for message in probe_result["errors"]:
+                add_error("probe", message)
         except Exception as error:
             add_error("probe", str(error))
         stages["probe"]["current_file"] = None

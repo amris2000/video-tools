@@ -21,7 +21,6 @@ from videotools.telemetry import (
 )
 
 
-
 def parse_creation_time(
     value: str | None,
     timezone_name: str,
@@ -29,153 +28,83 @@ def parse_creation_time(
     if not value:
         return None
 
-    # ffprobe gives us timestamps such as:
-    # 2026-09-06T17:34:18.000000Z
-    utc_time = datetime.fromisoformat(
-        value.replace("Z", "+00:00")
-    )
+    utc_time = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return utc_time.astimezone(ZoneInfo(timezone_name))
 
-    local_timezone = ZoneInfo(timezone_name)
 
-    return utc_time.astimezone(local_timezone)
-
-def journal_entry_range(
-    entry: dict,
-    timezone_name: str,
-):
+def journal_entry_range(entry: dict, timezone_name: str):
     date_value = entry.get("date")
     start_time = entry.get("start_time")
     end_time = entry.get("end_time")
-
     if not date_value or not start_time:
         return None
 
     timezone = ZoneInfo(timezone_name)
-
     start = datetime.strptime(
-        f"{date_value} {start_time}",
-        "%Y-%m-%d %H:%M",
+        f"{date_value} {start_time}", "%Y-%m-%d %H:%M"
     ).replace(tzinfo=timezone)
-
     if end_time:
         end = datetime.strptime(
-            f"{date_value} {end_time}",
-            "%Y-%m-%d %H:%M",
+            f"{date_value} {end_time}", "%Y-%m-%d %H:%M"
         ).replace(tzinfo=timezone)
-
-        # Support activities crossing midnight:
-        # 23:00 -> 01:30
         if end < start:
             end += timedelta(days=1)
     else:
         end = None
-
     return start, end
 
-def match_journal_entry(
-    creation_time: str | None,
-    journal: dict,
-    timezone_name: str,
-):
-    clip_time = parse_creation_time(
-        creation_time,
-        timezone_name,
-    )
 
+def match_journal_entry(creation_time: str | None, journal: dict, timezone_name: str):
+    clip_time = parse_creation_time(creation_time, timezone_name)
     if clip_time is None:
         return None
-
     for entry in journal.get("entries", []):
-        time_range = journal_entry_range(
-            entry,
-            timezone_name,
-        )
-
+        time_range = journal_entry_range(entry, timezone_name)
         if time_range is None:
             continue
-
         start, end = time_range
-
         if end is None:
-            # If only start time was given,
-            # require same date and clip after start.
-            if (
-                clip_time.date() == start.date()
-                and clip_time >= start
-            ):
+            if clip_time.date() == start.date() and clip_time >= start:
                 return entry
-
         elif start <= clip_time <= end:
             return entry
-
     return None
+
 
 def build_format_groups(report_clips):
     counter = Counter(
-        (
-            clip["video"]["width"],
-            clip["video"]["height"],
-            clip["video"]["fps"],
-        )
+        (clip["video"]["width"], clip["video"]["height"], clip["video"]["fps"])
         for clip in report_clips
     )
+    return [
+        {"width": width, "height": height, "fps": fps, "count": count}
+        for (width, height, fps), count in counter.most_common()
+    ]
 
-    groups = []
-
-    for (width, height, fps), count in counter.most_common():
-        groups.append(
-            {
-                "width": width,
-                "height": height,
-                "fps": fps,
-                "count": count,
-            }
-        )
-
-    return groups
 
 def build_warnings(report_clips):
     warnings = []
-
-    fps_groups = Counter(
-        clip["video"]["fps"]
-        for clip in report_clips
-    )
-
+    fps_groups = Counter(clip["video"]["fps"] for clip in report_clips)
     if len(fps_groups) > 1:
-        warnings.append(
-            {
-                "type": "multiple_frame_rates",
-                "message": "Multiple frame rates detected.",
-                "values": dict(fps_groups),
-            }
-        )
+        warnings.append({
+            "type": "multiple_frame_rates",
+            "message": "Multiple frame rates detected.",
+            "values": dict(fps_groups),
+        })
 
     resolution_groups = Counter(
-        (
-            clip["video"]["width"],
-            clip["video"]["height"],
-        )
+        (clip["video"]["width"], clip["video"]["height"])
         for clip in report_clips
     )
-
     if len(resolution_groups) > 1:
-        warnings.append(
-            {
-                "type": "multiple_resolutions",
-                "message": "Multiple resolutions detected.",
-                "values": [
-                    {
-                        "width": width,
-                        "height": height,
-                        "count": count,
-                    }
-                    for (width, height), count
-                    in resolution_groups.items()
-                ],
-            }
-        )
-
+        warnings.append({
+            "type": "multiple_resolutions",
+            "message": "Multiple resolutions detected.",
+            "values": [
+                {"width": width, "height": height, "count": count}
+                for (width, height), count in resolution_groups.items()
+            ],
+        })
     return warnings
 
 def parse_fps(value: str) -> float:
@@ -217,6 +146,8 @@ def probe_video(path: Path) -> dict:
         capture_output=True,
         text=True,
         check=True,
+        stdin=subprocess.DEVNULL,
+        timeout=300,
     )
 
     return json.loads(result.stdout)
@@ -252,6 +183,177 @@ def get_creation_time(info: dict):
             return tags["creation_time"]
 
     return None
+
+
+def probe_clip_metadata(
+    project_root: Path,
+    clip: Path,
+    *,
+    timezone_name: str,
+    journal: dict,
+    project: VideoProject | None = None,
+) -> dict:
+    """Probe one local clip and return its normal clip-report entry."""
+    project_root = Path(project_root).resolve()
+    clip = Path(clip).resolve()
+    clips_dir = project.clips_dir.resolve() if project else (project_root / "clips").resolve()
+    if not clip.is_relative_to(clips_dir):
+        raise ValueError("Clip must stay inside the configured clips directory.")
+
+    info = probe_video(clip)
+    gopro_metadata_stream = get_gopro_metadata_stream(info)
+    gps = extract_gps(clip) if gopro_metadata_stream else empty_gps()
+    video_stream = next(
+        (
+            stream
+            for stream in info.get("streams", [])
+            if stream.get("codec_type") == "video"
+        ),
+        None,
+    )
+    if video_stream is None:
+        raise ValueError(f"No video stream found in {clip.name}.")
+
+    audio_stream = next(
+        (
+            stream
+            for stream in info.get("streams", [])
+            if stream.get("codec_type") == "audio"
+        ),
+        None,
+    )
+    fps = parse_fps(video_stream.get("avg_frame_rate", "0/1"))
+    format_info = info.get("format", {})
+    duration = float(format_info.get("duration") or 0)
+    file_size = int(format_info.get("size") or clip.stat().st_size)
+    bitrate = int(format_info.get("bit_rate") or 0)
+    creation_time = get_creation_time(info)
+    matched_journal = match_journal_entry(creation_time, journal, timezone_name)
+    local_creation_time = parse_creation_time(creation_time, timezone_name)
+    thumbnail_filename = thumbnail_name(clip, project_root)
+    metadata_dir = project.metadata_dir if project else project_root / "metadata"
+    thumbnail_file = metadata_dir / "thumbnails" / thumbnail_filename
+    thumbnail_relative = (
+        metadata_dir.relative_to(project_root) / "thumbnails" / thumbnail_filename
+    ).as_posix()
+
+    clip_info = {
+        "name": clip.name,
+        "relative_path": clip.relative_to(project_root).as_posix(),
+        "thumbnail": thumbnail_relative if thumbnail_file.exists() else None,
+        "size_bytes": file_size,
+        "modified_time_ns": clip.stat().st_mtime_ns,
+        "creation_time": creation_time,
+        "creation_time_local": local_creation_time.isoformat() if local_creation_time else None,
+        "duration": round(duration, 3),
+        "video": {
+            "width": video_stream.get("width"),
+            "height": video_stream.get("height"),
+            "fps": round(fps, 3),
+            "codec": video_stream.get("codec_name"),
+            "profile": video_stream.get("profile"),
+            "pixel_format": video_stream.get("pix_fmt"),
+            "bitrate": bitrate,
+        },
+        "audio": None,
+        "telemetry": {"gopro_metadata": gopro_metadata_stream is not None, "gps": gps},
+        "journal": None,
+    }
+    if matched_journal:
+        clip_info["journal"] = {
+            "date": matched_journal.get("date"),
+            "activity": matched_journal.get("activity"),
+            "location": matched_journal.get("location"),
+            "start_time": matched_journal.get("start_time"),
+            "end_time": matched_journal.get("end_time"),
+            "tags": matched_journal.get("tags", []),
+            "highlight": matched_journal.get("highlight"),
+        }
+    if audio_stream:
+        clip_info["audio"] = {
+            "codec": audio_stream.get("codec_name"),
+            "sample_rate": audio_stream.get("sample_rate"),
+            "channels": audio_stream.get("channels"),
+            "channel_layout": audio_stream.get("channel_layout"),
+        }
+    return clip_info
+
+
+def probe_clips_incrementally(
+    project: VideoProject,
+    clip_paths: Iterable[Path],
+    *,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> dict:
+    """Probe only the given local clips and merge entries into the project report."""
+    project_root = project.root.resolve()
+    metadata_dir = project.metadata_dir
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    report_file = metadata_dir / "clip_report.json"
+    old_report = load_existing_report(report_file) or {}
+    old_clips = old_report.get("clips", []) if isinstance(old_report, dict) else []
+    entries = {
+        item.get("relative_path"): item
+        for item in old_clips
+        if isinstance(item, dict) and item.get("relative_path")
+    } if isinstance(old_clips, list) else {}
+    clips = [Path(path).resolve() for path in clip_paths]
+    journal = load_journal(project.journal_file)
+    errors: list[str] = []
+
+    def publish(status: str, clip: Path, completed: int, error: str | None = None) -> None:
+        if progress_callback:
+            progress_callback({
+                "status": status,
+                "current_file": clip.name,
+                "completed": completed,
+                "total": len(clips),
+                "error": error,
+            })
+        if error:
+            errors.append(f"{clip.name}: {error}")
+
+    for index, clip in enumerate(clips, start=1):
+        publish("running", clip, index - 1)
+        try:
+            entry = probe_clip_metadata(
+                project_root,
+                clip,
+                timezone_name=project.config.get("timezone", "Europe/Copenhagen"),
+                journal=journal,
+                project=project,
+            )
+        except Exception as error:
+            publish("failed", clip, index, str(error))
+            continue
+        entries[entry["relative_path"]] = entry
+        report = _make_clip_report(list(entries.values()))
+        report_file.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        publish("completed", clip, index)
+
+    return {"probed": len(clips) - len(errors), "errors": errors}
+
+
+def _make_clip_report(report_clips: list[dict]) -> dict:
+    widths = [clip["video"]["width"] for clip in report_clips]
+    heights = [clip["video"]["height"] for clip in report_clips]
+    fps_values = [clip["video"]["fps"] for clip in report_clips]
+    return {
+        "summary": {
+            "clip_count": len(report_clips),
+            "total_duration_seconds": round(sum(clip["duration"] for clip in report_clips), 3),
+            "total_size_bytes": sum(clip["size_bytes"] for clip in report_clips),
+            "recommended_width": most_common(widths),
+            "recommended_height": most_common(heights),
+            "recommended_fps": most_common(fps_values),
+            "formats": build_format_groups(report_clips),
+            "warnings": build_warnings(report_clips),
+        },
+        "clips": report_clips,
+    }
 
 def load_existing_report(
     report_file: Path,
@@ -420,22 +522,15 @@ def analyze_project(
 
             continue
 
-        print(
-            f"[{index}/{len(clips)}] "
-            f"Probing {clip.name}"
-        )
-
         try:
-            info = probe_video(clip)
-
-            gopro_metadata_stream = get_gopro_metadata_stream(
-                info
+            print(f"[{index}/{len(clips)}] Probing {clip.name}")
+            clip_info = probe_clip_metadata(
+                project_root,
+                clip,
+                timezone_name=timezone_name,
+                journal=journal,
+                project=project,
             )
-
-            if gopro_metadata_stream:
-                gps = extract_gps(clip)
-            else:
-                gps = empty_gps()
         except subprocess.CalledProcessError as error:
             print(f"WARNING: ffprobe failed for {clip}")
             print(error.stderr)
@@ -446,134 +541,6 @@ def analyze_project(
                 raise
             report_progress("failed", clip, index, str(error))
             continue
-
-        video_stream = next(
-            (
-                stream
-                for stream in info.get("streams", [])
-                if stream.get("codec_type") == "video"
-            ),
-            None,
-        )
-
-        audio_stream = next(
-            (
-                stream
-                for stream in info.get("streams", [])
-                if stream.get("codec_type") == "audio"
-            ),
-            None,
-        )
-
-        if video_stream is None:
-            print(f"Skipping {clip.name}: no video stream")
-            report_progress("failed", clip, index, "No video stream found.")
-            continue
-
-        fps = parse_fps(
-            video_stream.get("avg_frame_rate", "0/1")
-        )
-
-        format_info = info.get("format", {})
-
-        duration = float(
-            format_info.get("duration") or 0
-        )
-
-        file_size = int(
-            format_info.get("size") or clip.stat().st_size
-        )
-
-        bitrate = int(
-            format_info.get("bit_rate") or 0
-        )
-
-        creation_time = get_creation_time(info)
-
-        matched_journal = match_journal_entry(
-            creation_time,
-            journal,
-            timezone_name,
-        )
-
-        local_creation_time = parse_creation_time(
-            creation_time,
-            timezone_name,
-        )
-
-        thumbnail_filename = thumbnail_name(
-            clip,
-            project_root,
-        )
-
-        thumbnail_file = metadata_dir / "thumbnails" / thumbnail_filename
-        thumbnail_relative = (
-            metadata_dir.relative_to(project_root) / "thumbnails" / thumbnail_filename
-        ).as_posix()
-
-        clip_info = {
-            "name": clip.name,
-
-
-            "relative_path": relative_path,
-            "thumbnail": (
-                thumbnail_relative
-                if thumbnail_file.exists()
-                else None
-            ),
-            "size_bytes": file_size,
-            "modified_time_ns": clip.stat().st_mtime_ns,
-            "creation_time": creation_time,
-
-            "creation_time_local": (
-                local_creation_time.isoformat()
-                if local_creation_time
-                else None
-            ),
-
-            "duration": round(duration, 3),
-
-            "video": {
-                "width": video_stream.get("width"),
-                "height": video_stream.get("height"),
-                "fps": round(fps, 3),
-                "codec": video_stream.get("codec_name"),
-                "profile": video_stream.get("profile"),
-                "pixel_format": video_stream.get("pix_fmt"),
-                "bitrate": bitrate,
-            },
-
-            "audio": None,
-            "telemetry": {
-                "gopro_metadata": (
-                    gopro_metadata_stream is not None
-                ),
-                "gps": gps,
-            },
-            "journal": None,
-        }
-
-        if matched_journal:
-            clip_info["journal"] = {
-                "date": matched_journal.get("date"),
-                "activity": matched_journal.get("activity"),
-                "location": matched_journal.get("location"),
-                "start_time": matched_journal.get("start_time"),
-                "end_time": matched_journal.get("end_time"),
-                "tags": matched_journal.get("tags", []),
-                "highlight": matched_journal.get("highlight"),
-            }
-
-        if audio_stream:
-            clip_info["audio"] = {
-                "codec": audio_stream.get("codec_name"),
-                "sample_rate": audio_stream.get("sample_rate"),
-                "channels": audio_stream.get("channels"),
-                "channel_layout": audio_stream.get(
-                    "channel_layout"
-                ),
-            }
-
         report_clips.append(clip_info)
         report_progress("completed", clip, index)
 

@@ -112,6 +112,8 @@ def extract_gps(path: Path) -> dict:
             capture_output=True,
             text=True,
             check=True,
+            stdin=subprocess.DEVNULL,
+            timeout=300,
         )
     except subprocess.CalledProcessError:
         return empty_gps()
