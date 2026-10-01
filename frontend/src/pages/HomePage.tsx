@@ -42,7 +42,7 @@ export function HomePage() {
               Select a video project to continue.
             </Text>
           </Box>
-
+          .-
           <HStack>
             <Button variant="outline" onClick={() => void refreshProjects()}>
               Refresh

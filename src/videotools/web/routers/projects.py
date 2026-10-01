@@ -1,4 +1,7 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+from videotools.project import VideoProject
+from videotools.services.clips import list_clips, resolve_thumbnail
 
 from videotools.services.projects import (
     ProjectInfo,
@@ -7,6 +10,7 @@ from videotools.services.projects import (
     get_project,
 )
 from videotools.web.schemas import (
+    ClipResponse,
     ProjectDetailsResponse,
     ProjectPathsResponse,
     ProjectResponse,
@@ -96,3 +100,30 @@ def get_project_details(
             ),
         ),
     )
+
+def _clip_project(project_id: str) -> VideoProject:
+    if project_id in {".", ".."} or any(c in project_id for c in "/\\:"):
+        raise HTTPException(status_code=404, detail="Project not found.")
+    try:
+        info = get_project(project_id)
+        if info is None:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        return VideoProject.load(info.path)
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/{project_id}/clips", response_model=list[ClipResponse])
+def get_clips(project_id: str) -> list[dict]:
+    try:
+        return list_clips(_clip_project(project_id), project_id)
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/{project_id}/thumbnails/{relative_path:path}")
+def get_thumbnail(project_id: str, relative_path: str):
+    try:
+        return FileResponse(resolve_thumbnail(_clip_project(project_id), relative_path))
+    except (ValueError, FileNotFoundError) as error:
+        raise HTTPException(status_code=404, detail="Thumbnail not found.") from error

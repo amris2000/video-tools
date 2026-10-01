@@ -1,3 +1,4 @@
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Stack, Text, VStack } from "@chakra-ui/react";
 
 import {
@@ -42,6 +43,9 @@ const navigation = [
 ];
 
 export function Sidebar() {
+  const { projectId } = useParams();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   return (
     <VStack
       as="nav"
@@ -70,6 +74,9 @@ export function Sidebar() {
         {navigation.map((item) => (
           <Button
             key={item.label}
+            isDisabled={!["Overview", "Clips"].includes(item.label)}
+            isActive={["Overview", "Clips"].includes(item.label) && pathname === "/projects/" + projectId + (item.label === "Clips" ? "/clips" : "")}
+            onClick={() => navigate("/projects/" + projectId + (item.label === "Clips" ? "/clips" : ""))}
             leftIcon={<item.icon />}
             justifyContent="flex-start"
             variant="ghost"

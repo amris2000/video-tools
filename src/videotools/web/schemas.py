@@ -36,3 +36,12 @@ class ProjectStatsResponse(BaseModel):
 
 class ProjectDetailsResponse(ProjectResponse):
     stats: ProjectStatsResponse
+class ClipResponse(BaseModel):
+    path: str
+    name: str
+    duration: float | None = None
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    creation_time: str | None = None
+    thumbnail_url: str | None = None

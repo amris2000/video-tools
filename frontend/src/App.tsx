@@ -4,6 +4,8 @@ import { AppBootstrap } from "./components/AppBootstrap";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ProjectLayout } from "./components/layout/ProjectLayout";
 
+import { ClipBrowserDemo } from "./examples/ClipBrowserDemo";
+import { ClipsPage } from "./pages/ClipsPage";
 import { HomePage } from "./pages/HomePage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -34,9 +36,11 @@ function App() {
           */}
           <Route path="/projects/:projectId" element={<ProjectLayout />}>
             <Route index element={<OverviewPage />} />
+            <Route path="clips" element={<ClipsPage />} />
+            {import.meta.env.DEV && <Route path="clips/demo" element={<ClipBrowserDemo />} />}
 
             {/*
-            <Route path="clips" element={<ClipsPage />} />
+
             <Route path="import" element={<ImportPage />} />
             <Route path="editor" element={<EditorPage />} />
             <Route path="renders" element={<RendersPage />} />
