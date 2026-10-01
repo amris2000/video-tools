@@ -458,10 +458,10 @@ function renderInspector() {
     return;
   }
 
-  if (
-    !elements.previewVideo.dataset.currentFile ||
-    elements.previewVideo.dataset.currentFile !== clip.file
-  ) {
+  const sourceChanged =
+    elements.previewVideo.dataset.currentFile !== clip.file;
+
+  if (sourceChanged) {
     elements.previewVideo.dataset.currentFile =
       clip.file;
 
@@ -469,6 +469,36 @@ function renderInspector() {
       mediaUrl(clip.file);
 
     elements.previewVideo.load();
+  }
+
+  const occurrenceKey =
+    `${state.selectedIndex}:${clip.file}:${clip.start}`;
+
+  if (
+    elements.previewVideo.dataset.currentOccurrence !==
+    occurrenceKey
+  ) {
+    elements.previewVideo.dataset.currentOccurrence =
+      occurrenceKey;
+
+    const seekToOccurrence = () => {
+      if (
+        elements.previewVideo.dataset.currentOccurrence ===
+        occurrenceKey
+      ) {
+        elements.previewVideo.currentTime = clip.start;
+      }
+    };
+
+    if (elements.previewVideo.readyState >= 1) {
+      seekToOccurrence();
+    } else {
+      elements.previewVideo.addEventListener(
+        "loadedmetadata",
+        seekToOccurrence,
+        { once: true }
+      );
+    }
   }
 
   const maxDuration =
@@ -1673,6 +1703,8 @@ function handleTimelineAction(
 
   if (action === "select") {
     state.selectedIndex = index;
+    state.playbackStopAt = null;
+    elements.previewVideo.pause();
   } else if (
     action === "up" &&
     index > 0

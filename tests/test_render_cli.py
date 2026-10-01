@@ -187,19 +187,22 @@ exports = "exports"
         create_render_output_path_mock.return_value = output_path
         render_accurate_mock.return_value = output_path
         messages = []
-        answers = iter(("", "1"))
+        answers = iter(("", "1", ""))
 
-        result = run_render_workflow(
-            self.project,
-            input_func=lambda prompt: next(answers),
-            output_func=messages.append,
-        )
+        with patch("videotools.render_cli.probe_timeline_sources", return_value={}), patch(
+            "videotools.render_cli.validate_accurate_compatibility"
+        ):
+            result = run_render_workflow(
+                self.project,
+                input_func=lambda prompt: next(answers),
+                output_func=messages.append,
+            )
 
         self.assertEqual(result, output_path)
         load_edit_timeline_mock.assert_called_once_with(edit_file, self.project)
-        create_render_output_path_mock.assert_not_called()
+        create_render_output_path_mock.assert_called_once_with(self.project, "accurate")
         render_timeline = render_accurate_mock.call_args.args[0]
-        self.assertEqual(render_timeline.output, self.timeline.output)
+        self.assertEqual(render_timeline.output, output_path)
         self.assertEqual(render_timeline.clips, self.timeline.clips)
         self.assertEqual(render_timeline.version, self.timeline.version)
         self.assertEqual(self.timeline.output, self.project.exports_dir / "stored-output.mp4")
@@ -207,7 +210,7 @@ exports = "exports"
         joined = "\n".join(messages)
         self.assertIn("Edit: edits/chosen_edit.json", joined)
         self.assertIn("Mode: accurate", joined)
-        self.assertIn("Output: exports/stored-output.mp4", joined)
+        self.assertIn("Output: exports/20260913_105103_accurate.mp4", joined)
 
     @patch("videotools.render_cli.render_fast")
     @patch("videotools.render_cli.create_render_output_path")
@@ -226,17 +229,19 @@ exports = "exports"
         load_edit_timeline_mock.return_value = self.timeline
         create_render_output_path_mock.return_value = output_path
         render_fast_mock.return_value = output_path
-        answers = iter(("2", "1"))
+        answers = iter(("2", "1", ""))
 
-        result = run_render_workflow(
-            self.project,
-            input_func=lambda prompt: next(answers),
-            output_func=lambda message: None,
-        )
+        with patch("videotools.render_cli.probe_timeline_sources", return_value={}):
+            result = run_render_workflow(
+                self.project,
+                input_func=lambda prompt: next(answers),
+                output_func=lambda message: None,
+            )
 
         self.assertEqual(result, output_path)
         render_fast_mock.assert_called_once()
-        create_render_output_path_mock.assert_not_called()
+        create_render_output_path_mock.assert_called_once_with(self.project, "fast")
+        self.assertEqual(render_fast_mock.call_args.args[0].output, output_path)
         self.assertEqual(render_fast_mock.call_args.kwargs["overwrite"], False)
 
     @patch("videotools.render_cli.render_accurate")
@@ -256,6 +261,7 @@ exports = "exports"
     ):
         edit_file = self.project.edits_dir / "chosen_edit.json"
         fallback_output = self.project.exports_dir / "20260913_105103_accurate.mp4"
+        output_path = self.project.exports_dir / "20260913_105104_accurate.mp4"
         fallback_timeline = EditTimeline(
             output=fallback_output,
             clips=self.timeline.clips,
@@ -263,23 +269,28 @@ exports = "exports"
         )
         list_edit_files_mock.return_value = [edit_file]
         load_edit_timeline_mock.side_effect = EditValidationError("output must be a non-empty string.")
-        create_render_output_path_mock.return_value = fallback_output
+        create_render_output_path_mock.side_effect = [fallback_output, output_path]
         read_edit_document_mock.return_value = {
             "version": 1,
             "clips": [{"file": "clip.mp4", "start": 0.0, "end": 3.0}],
         }
         parse_edit_timeline_mock.return_value = fallback_timeline
-        render_accurate_mock.return_value = fallback_output
-        answers = iter(("", "1"))
+        render_accurate_mock.return_value = output_path
+        answers = iter(("", "1", ""))
 
-        result = run_render_workflow(
-            self.project,
-            input_func=lambda prompt: next(answers),
-            output_func=lambda message: None,
-        )
+        with patch("videotools.render_cli.probe_timeline_sources", return_value={}), patch(
+            "videotools.render_cli.validate_accurate_compatibility"
+        ):
+            result = run_render_workflow(
+                self.project,
+                input_func=lambda prompt: next(answers),
+                output_func=lambda message: None,
+            )
 
-        self.assertEqual(result, fallback_output)
-        create_render_output_path_mock.assert_called_once_with(self.project, "accurate")
+        self.assertEqual(result, output_path)
+        self.assertEqual(create_render_output_path_mock.call_count, 2)
+        self.assertEqual(create_render_output_path_mock.call_args_list[0].args, (self.project, "accurate"))
+        self.assertEqual(create_render_output_path_mock.call_args_list[1].args, (self.project, "accurate"))
         self.assertEqual(
             read_edit_document_mock.return_value["output"],
             "20260913_105103_accurate.mp4",

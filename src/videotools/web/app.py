@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from videotools.web.frontend import find_frontend_build
-from videotools.web.routers import config, projects
+from videotools.web.routers import config, projects, workflows
 
 
 app = FastAPI(
@@ -23,12 +23,26 @@ app.include_router(
     prefix="/api",
 )
 
+app.include_router(
+    workflows.router,
+    prefix="/api",
+)
+
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {
         "status": "ok",
     }
+
+
+@app.api_route(
+    "/api/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+)
+def unknown_api_path(path: str):
+    del path
+    raise HTTPException(status_code=404, detail="API endpoint not found.")
 
 
 frontend_build = find_frontend_build()

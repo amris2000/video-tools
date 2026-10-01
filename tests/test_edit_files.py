@@ -10,6 +10,7 @@ from videotools.edit_files import (
     create_empty_edit_document,
     create_new_edit_file,
     create_render_output_path,
+    load_edit_document,
     list_render_files,
     list_social_render_files,
     list_edit_files,
@@ -108,6 +109,23 @@ exports = "exports"
         text = (self.project.edits_dir / "draft_edit.json").read_text(encoding="utf-8")
         self.assertTrue(text.endswith("\n"))
         self.assertEqual(json.loads(text), updated)
+
+    def test_save_and_load_preserve_duplicate_timeline_occurrences(self):
+        filename = "duplicate_edit.json"
+        document = {
+            "version": 1,
+            "output": "duplicate_video.mp4",
+            "clips": [
+                {"file": "same.mp4", "start": 5, "end": 10, "label": "A"},
+                {"file": "same.mp4", "start": 30, "end": 40, "label": "B"},
+            ],
+        }
+        create_edit_document(self.project, filename, document)
+        save_edit_document(self.project, filename, document)
+
+        loaded = load_edit_document(self.project, filename)
+
+        self.assertEqual(loaded["clips"], document["clips"])
 
     def test_create_render_output_path_uses_mode_and_exports_dir(self):
         with patch("videotools.edit_files.datetime") as mocked_datetime:

@@ -1,0 +1,228 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from threading import Event
+import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+
+from videotools.project import VideoProject
+from videotools.services.media import resolve_export_video, resolve_project_media
+from videotools.web.app import app
+
+
+class ProjectWorkflowApiTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = TemporaryDirectory()
+        self.root = Path(self.temporary_directory.name)
+        for directory in ("clips/day-one", "edits", "exports", "exports-social"):
+            (self.root / directory).mkdir(parents=True, exist_ok=True)
+        (self.root / "project.toml").write_text(
+            """\
+name = "workflow-project"
+
+[paths]
+clips = "clips"
+edits = "edits"
+exports = "exports"
+exports_social = "exports-social"
+""",
+            encoding="utf-8",
+        )
+        self.project = VideoProject.load(self.root)
+        self.clip = self.project.clips_dir / "day-one" / "same.mp4"
+        self.clip.write_bytes(b"abcdefghijklmnopqrstuvwxyz")
+        self.render = self.project.exports_dir / "normal.mp4"
+        self.render.write_bytes(b"normal-render")
+        self.social = self.project.exports_social_dir / "vertical.mp4"
+        self.social.write_bytes(b"social-render")
+        self.client = TestClient(app)
+        self.project_patch = patch(
+            "videotools.web.routers.workflows.get_project",
+            return_value=SimpleNamespace(path=self.root),
+        )
+        self.project_patch.start()
+
+    def tearDown(self):
+        self.project_patch.stop()
+        self.temporary_directory.cleanup()
+
+    def test_edit_api_saves_and_loads_duplicate_occurrences(self):
+        created = self.client.post(
+            "/api/projects/workflow-project/edits",
+            json={"filename": "duplicate_edit.json", "output": "duplicate.mp4"},
+        )
+        self.assertEqual(created.status_code, 201)
+
+        document = {
+            "version": 1,
+            "output": "duplicate.mp4",
+            "clips": [
+                {"file": "day-one/same.mp4", "start": 5, "end": 10, "label": "A"},
+                {"file": "day-one/same.mp4", "start": 30, "end": 40, "label": "B"},
+            ],
+        }
+        saved = self.client.put(
+            "/api/projects/workflow-project/edits/duplicate_edit.json",
+            json={"document": document},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+
+        loaded = self.client.get(
+            "/api/projects/workflow-project/edits/duplicate_edit.json"
+        )
+        self.assertEqual(loaded.status_code, 200)
+        self.assertEqual(loaded.json()["clips"], document["clips"])
+
+    def test_media_and_exports_stream_ranges_and_reject_traversal(self):
+        response = self.client.get(
+            "/api/projects/workflow-project/media/day-one/same.mp4",
+            headers={"Range": "bytes=2-5"},
+        )
+        self.assertEqual(response.status_code, 206)
+        self.assertEqual(response.content, b"cdef")
+        self.assertEqual(response.headers["content-range"], "bytes 2-5/26")
+        self.assertEqual(response.headers["accept-ranges"], "bytes")
+
+        export_response = self.client.get(
+            "/api/projects/workflow-project/exports/normal.mp4",
+            headers={"Range": "bytes=0-5"},
+        )
+        self.assertEqual(export_response.status_code, 206)
+        self.assertEqual(export_response.content, b"normal")
+
+        social_response = self.client.get(
+            "/api/projects/workflow-project/social-exports/vertical.mp4",
+            headers={"Range": "bytes=0-5"},
+        )
+        self.assertEqual(social_response.status_code, 206)
+        self.assertEqual(social_response.content, b"social")
+
+        for url, status in (
+            ("/api/projects/workflow-project/media/%2E%2E%2Foutside.mp4", 400),
+            ("/api/projects/workflow-project/exports/%2E%2E%2Foutside.mp4", 404),
+            ("/api/projects/workflow-project/social-exports/%2E%2E%2Foutside.mp4", 404),
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, status)
+
+        with self.assertRaises(ValueError):
+            resolve_project_media(self.project, "../outside.mp4")
+        with self.assertRaises(ValueError):
+            resolve_export_video(self.project, "../outside.mp4")
+        with self.assertRaises(ValueError):
+            resolve_export_video(self.project, "../outside.mp4", social=True)
+
+    def test_exports_list_and_social_options_use_existing_supported_choices(self):
+        exports = self.client.get("/api/projects/workflow-project/exports")
+        self.assertEqual(exports.status_code, 200)
+        self.assertEqual([item["filename"] for item in exports.json()["renders"]], ["normal.mp4"])
+        self.assertEqual(
+            [item["filename"] for item in exports.json()["social_exports"]],
+            ["vertical.mp4"],
+        )
+        self.assertGreater(exports.json()["renders"][0]["size_bytes"], 0)
+
+        options = self.client.get("/api/projects/workflow-project/social-options")
+        self.assertEqual(options.status_code, 200)
+        self.assertEqual([item["key"] for item in options.json()["presets"]], ["instagram"])
+        self.assertEqual([item["key"] for item in options.json()["framing_modes"]], ["crop", "fit"])
+
+    def test_render_api_returns_a_busy_job_then_reports_completion(self):
+        self.client.post(
+            "/api/projects/workflow-project/edits",
+            json={"filename": "render_edit.json", "output": "render.mp4"},
+        )
+        self.client.put(
+            "/api/projects/workflow-project/edits/render_edit.json",
+            json={
+                "document": {
+                    "version": 1,
+                    "output": "render.mp4",
+                    "clips": [{"file": "day-one/same.mp4", "start": 5, "end": 10}],
+                }
+            },
+        )
+        started = Event()
+        release = Event()
+
+        def fake_render(timeline, *, overwrite):
+            del overwrite
+            started.set()
+            release.wait(timeout=3)
+            return timeline.output
+
+        with patch("videotools.services.workflows.render_accurate", side_effect=fake_render):
+            response = self.client.post(
+                "/api/projects/workflow-project/renders",
+                json={"edit_filename": "render_edit.json", "mode": "accurate"},
+            )
+            self.assertEqual(response.status_code, 202, response.text)
+            job_id = response.json()["job_id"]
+            try:
+                self.assertTrue(started.wait(timeout=2))
+                running = self.client.get(f"/api/projects/workflow-project/jobs/{job_id}")
+                self.assertEqual(running.status_code, 200)
+                self.assertEqual(running.json()["status"], "running")
+
+                duplicate = self.client.post(
+                    "/api/projects/workflow-project/renders",
+                    json={"edit_filename": "render_edit.json", "mode": "accurate"},
+                )
+                self.assertEqual(duplicate.status_code, 409)
+            finally:
+                release.set()
+
+        completed = None
+        for _ in range(100):
+            response = self.client.get(f"/api/projects/workflow-project/jobs/{job_id}")
+            completed = response.json()
+            if completed["status"] == "completed":
+                break
+            Event().wait(0.01)
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["output_filename"].endswith("_accurate.mp4"), True)
+
+    def test_social_export_api_completes_and_lists_the_output(self):
+        converted = []
+
+        def fake_convert(*, source, output, preset, framing):
+            converted.append((source, preset.key, framing))
+            output.write_bytes(b"converted")
+            return output
+
+        with patch("videotools.services.workflows.convert_social_video", side_effect=fake_convert):
+            response = self.client.post(
+                "/api/projects/workflow-project/social-exports",
+                json={
+                    "source_filename": "normal.mp4",
+                    "preset": "instagram",
+                    "framing": "fit",
+                },
+            )
+            self.assertEqual(response.status_code, 202, response.text)
+            job_id = response.json()["job_id"]
+
+            completed = None
+            for _ in range(100):
+                job_response = self.client.get(
+                    f"/api/projects/workflow-project/jobs/{job_id}"
+                )
+                completed = job_response.json()
+                if completed["status"] == "completed":
+                    break
+                Event().wait(0.01)
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(converted[0][1:], ("instagram", "fit"))
+        exports = self.client.get("/api/projects/workflow-project/exports").json()
+        self.assertEqual(
+            [item["filename"] for item in exports["social_exports"]],
+            ["vertical.mp4", "normal_instagram.mp4"],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

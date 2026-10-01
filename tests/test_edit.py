@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from videotools.edit import EditValidationError, load_edit_timeline
+from videotools.editor_validation import validate_editor_document
 from videotools.project import VideoProject
 
 
@@ -64,6 +65,47 @@ journal = "journal.json"
             self.root / "clips" / "day-one" / "GX010017.MP4",
         )
         self.assertAlmostEqual(timeline.clips[0].duration, 5.3)
+
+    def test_duplicate_source_occurrences_keep_independent_ranges_and_order(self):
+        value = self.valid_edit()
+        value["clips"] = [
+            {
+                "file": "day-one/GX010017.MP4",
+                "start": 5,
+                "end": 10,
+                "label": "Opening",
+            },
+            {
+                "file": "day-one/GX010017.MP4",
+                "start": 30,
+                "end": 40,
+                "label": "Return",
+            },
+        ]
+
+        timeline = load_edit_timeline(self.write_edit(value), self.project)
+
+        self.assertEqual(len(timeline.clips), 2)
+        self.assertEqual(timeline.clips[0].file, timeline.clips[1].file)
+        self.assertEqual(
+            [(clip.start, clip.end, clip.label) for clip in timeline.clips],
+            [(5.0, 10.0, "Opening"), (30.0, 40.0, "Return")],
+        )
+
+    def test_editor_validation_keeps_duplicate_source_occurrences(self):
+        value = self.valid_edit()
+        value["clips"] = [
+            {"file": "day-one/GX010017.MP4", "start": 5, "end": 10},
+            {"file": "day-one/GX010017.MP4", "start": 30, "end": 40},
+        ]
+
+        validated = validate_editor_document(value, self.project)
+
+        self.assertEqual(len(validated["clips"]), 2)
+        self.assertEqual(
+            [(clip["start"], clip["end"]) for clip in validated["clips"]],
+            [(5.0, 10.0), (30.0, 40.0)],
+        )
 
     def test_version_is_optional_for_version_one(self):
         value = self.valid_edit()

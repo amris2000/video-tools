@@ -36,6 +36,23 @@ class FastRenderTests(unittest.TestCase):
         self.assertIn("outpoint 7.800000000", text)
         self.assertIn("inpoint 0.000000000", text)
 
+    def test_concat_text_keeps_duplicate_source_occurrences_and_ranges(self):
+        source = Path("/project/clips/same.mp4")
+        timeline = EditTimeline(
+            output=Path("/project/exports/final.mp4"),
+            clips=(
+                EditClip(source, 5.0, 10.0),
+                EditClip(source, 30.0, 40.0),
+            ),
+        )
+
+        text = build_concat_text(timeline)
+
+        self.assertEqual(text.count("file '/project/clips/same.mp4'"), 2)
+        self.assertLess(text.index("inpoint 5.000000000"), text.index("inpoint 30.000000000"))
+        self.assertIn("outpoint 10.000000000", text)
+        self.assertIn("outpoint 40.000000000", text)
+
     def test_fast_command_copies_only_primary_video_and_audio(self):
         command = build_fast_command(
             ffmpeg="ffmpeg",
@@ -178,6 +195,7 @@ class AccurateRenderTests(unittest.TestCase):
             timeline=timeline,
             has_audio=True,
             pixel_format="yuv420p10le",
+            target_frame_rate=None,
             overwrite=False,
         )
 
@@ -192,12 +210,46 @@ class AccurateRenderTests(unittest.TestCase):
         self.assertIn("[aout]", command)
         self.assertIn("-n", command)
 
+    def test_command_uses_separate_ranges_for_duplicate_source_occurrences(self):
+        source = Path("same.mp4")
+        timeline = EditTimeline(
+            output=Path("final.mp4"),
+            clips=(
+                EditClip(source, 5.0, 10.0),
+                EditClip(source, 30.0, 40.0),
+            ),
+        )
+
+        command = build_accurate_command(
+            ffmpeg="ffmpeg",
+            timeline=timeline,
+            has_audio=False,
+            pixel_format="yuv420p",
+            target_frame_rate=None,
+            overwrite=False,
+        )
+
+        self.assertEqual(command.count("-i"), 2)
+        self.assertEqual(
+            [command[index + 1] for index, value in enumerate(command) if value == "-ss"],
+            ["5.000000000", "30.000000000"],
+        )
+        self.assertEqual(
+            [command[index + 1] for index, value in enumerate(command) if value == "-t"],
+            ["5.000000000", "10.000000000"],
+        )
+        self.assertEqual(
+            [command[index + 1] for index, value in enumerate(command) if value == "-i"],
+            ["same.mp4", "same.mp4"],
+        )
+
     def test_command_omits_audio_encoder_for_silent_sources(self):
         command = build_accurate_command(
             ffmpeg="ffmpeg",
             timeline=self.timeline(),
             has_audio=False,
             pixel_format="yuv420p",
+            target_frame_rate=None,
             overwrite=True,
         )
 

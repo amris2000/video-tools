@@ -6,8 +6,11 @@ import { ProjectLayout } from "./components/layout/ProjectLayout";
 
 import { ClipBrowserDemo } from "./examples/ClipBrowserDemo";
 import { ClipsPage } from "./pages/ClipsPage";
+import { EditorPage } from "./pages/EditorPage";
+import { ExportsPage } from "./pages/ExportsPage";
 import { HomePage } from "./pages/HomePage";
 import { OverviewPage } from "./pages/OverviewPage";
+import { RenderPage } from "./pages/RenderPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SetupPage } from "./pages/SetupPage";
 
@@ -37,16 +40,10 @@ function App() {
           <Route path="/projects/:projectId" element={<ProjectLayout />}>
             <Route index element={<OverviewPage />} />
             <Route path="clips" element={<ClipsPage />} />
-            {import.meta.env.DEV && <Route path="clips/demo" element={<ClipBrowserDemo />} />}
-
-            {/*
-
-            <Route path="import" element={<ImportPage />} />
             <Route path="editor" element={<EditorPage />} />
-            <Route path="renders" element={<RendersPage />} />
-            <Route path="social" element={<SocialPage />} />
-            <Route path="journal" element={<JournalPage />} />
-            */}
+            <Route path="render" element={<RenderPage />} />
+            <Route path="exports" element={<ExportsPage />} />
+            {import.meta.env.DEV && <Route path="clips/demo" element={<ClipBrowserDemo />} />}
           </Route>
         </Route>
 

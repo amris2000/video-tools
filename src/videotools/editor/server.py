@@ -33,6 +33,12 @@ from videotools.editor_validation import validate_editor_document
 from videotools.media import VIDEO_EXTENSIONS
 from videotools.metadata import load_existing_report, probe_video
 from videotools.project import VideoProject
+from videotools.services.media import (
+    parse_byte_range,
+    resolve_export_video,
+    resolve_project_media,
+    stream_file,
+)
 
 STATIC_ROOT = files("videotools.editor").joinpath("static")
 DEFAULT_HOST = "127.0.0.1"
@@ -394,27 +400,7 @@ def _serve_file_with_ranges(handler: EditorRequestHandler, file_path: Path) -> N
 
 
 def _resolve_render_path(project: VideoProject, filename: str, *, social: bool) -> Path:
-    value = filename.strip()
-    candidate = Path(value)
-    target_root = project.exports_social_dir if social else project.exports_dir
-    root_name = "exports-social" if social else "exports"
-
-    if not value:
-        raise ValueError("Render filename is required.")
-    if candidate.is_absolute() or ".." in candidate.parts:
-        raise ValueError(f"Render filename must stay inside the project's {root_name} directory.")
-    if "/" in value or "\\" in value or len(candidate.parts) != 1:
-        raise ValueError("Render filename must not include directory separators.")
-    if candidate.suffix.lower() != ".mp4":
-        raise ValueError("Render filename must use the .mp4 extension.")
-
-    target = (target_root / candidate.name).resolve()
-    if not target.is_relative_to(target_root):
-        raise ValueError(f"Render filename must stay inside the project's {root_name} directory.")
-    if not target.is_file():
-        raise FileNotFoundError("Render file was not found.")
-
-    return target
+    return resolve_export_video(project, filename, social=social)
 
 
 def start_editor_server(
@@ -474,63 +460,16 @@ def _resolve_static_path(relative_path: str) -> Path:
 
 
 def _resolve_media_path(project: VideoProject, relative_path: str) -> Path:
-    candidate = Path(relative_path)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        raise ValueError("Media path must stay inside the project's clips directory.")
-
-    target = (project.clips_dir / candidate).resolve()
-    if not target.is_relative_to(project.clips_dir):
-        raise ValueError("Media path must stay inside the project's clips directory.")
-    if target.suffix.lower() not in VIDEO_EXTENSIONS:
-        raise ValueError("Media path is not a supported video type.")
-    if not target.is_file():
-        raise FileNotFoundError(f"Media file does not exist: {target}")
-
-    return target
+    return resolve_project_media(project, relative_path)
 
 
 def _parse_range_header(value: str, file_size: int) -> tuple[int | None, int | None]:
-    if not value.startswith("bytes=") or "," in value:
-        return None, None
-
-    start_text, _, end_text = value.removeprefix("bytes=").partition("-")
-
-    try:
-        if start_text and end_text:
-            start = int(start_text)
-            end = int(end_text)
-        elif start_text:
-            start = int(start_text)
-            end = file_size - 1
-        elif end_text:
-            suffix_length = int(end_text)
-            if suffix_length <= 0:
-                return None, None
-            start = max(0, file_size - suffix_length)
-            end = file_size - 1
-        else:
-            return None, None
-    except ValueError:
-        return None, None
-
-    if start < 0 or end < start or start >= file_size:
-        return None, None
-
-    return start, min(end, file_size - 1)
+    return parse_byte_range(value, file_size)
 
 
 def _stream_file(target, media_file: Path, *, start: int, length: int) -> None:
-    remaining = length
-
-    with media_file.open("rb") as handle:
-        handle.seek(start)
-
-        while remaining > 0:
-            chunk = handle.read(min(STREAM_CHUNK_SIZE, remaining))
-            if not chunk:
-                break
-            target.write(chunk)
-            remaining -= len(chunk)
+    for chunk in stream_file(media_file, start=start, length=length):
+        target.write(chunk)
 
 
 def _load_clip_catalog(project: VideoProject) -> list[ClipCatalogEntry]:
