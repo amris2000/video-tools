@@ -8,8 +8,9 @@ import {
   ModalHeader,
   ModalOverlay,
   Stack,
+  Text,
 } from "@chakra-ui/react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 interface VideoPreviewModalProps {
   isOpen: boolean;
@@ -27,29 +28,12 @@ export function VideoPreviewModal({
   metadata,
 }: VideoPreviewModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  function resetVideo() {
-    const video = videoRef.current;
-    if (!video) return;
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
-  }
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (!isOpen || !videoUrl) {
-      resetVideo();
-      return;
-    }
-    video.src = videoUrl;
-    video.load();
-    return resetVideo;
-  }, [isOpen, videoUrl]);
+  const [mediaError, setMediaError] = useState(false);
 
   function handleClose() {
-    resetVideo();
+    const video = videoRef.current;
+    video?.pause();
+    if (video) video.currentTime = 0;
     onClose();
   }
 
@@ -76,8 +60,24 @@ export function VideoPreviewModal({
               borderRadius="md"
               overflow="hidden"
             >
-              <video ref={videoRef} controls preload="metadata" />
+              <video
+                key={videoUrl}
+                ref={videoRef}
+                src={isOpen && videoUrl ? videoUrl : undefined}
+                controls
+                preload="metadata"
+                onLoadStart={() => setMediaError(false)}
+                onError={() => setMediaError(true)}
+              />
             </AspectRatio>
+            {mediaError && (
+              <Stack spacing={1}>
+                <Text color="red.600">Could not load this video.</Text>
+                <Text as="code" fontSize="xs" overflowWrap="anywhere">
+                  {videoUrl}
+                </Text>
+              </Stack>
+            )}
             {metadata && (
               <HStack spacing={4} flexWrap="wrap">
                 {metadata}

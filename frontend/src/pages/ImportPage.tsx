@@ -11,6 +11,7 @@ import {
   HStack,
   Input,
   Spinner,
+  Stack,
   Table,
   TableContainer,
   Tbody,
@@ -21,11 +22,13 @@ import {
   Tr,
   VStack,
 } from "@chakra-ui/react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import {
+  getDetectedImportSources,
   importGoProFiles,
   scanGoProImport,
+  type DetectedImportSource,
   type ImportPlan,
   type ImportResult,
 } from "../api/workflows";
@@ -50,18 +53,59 @@ export function ImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [busy, setBusy] = useState<"scan" | "import" | null>(null);
   const [error, setError] = useState("");
+  const [detectedSources, setDetectedSources] = useState<
+    DetectedImportSource[]
+  >([]);
+  const [detecting, setDetecting] = useState(true);
+  const [detectionError, setDetectionError] = useState("");
 
-  async function handleScan(event?: FormEvent) {
-    event?.preventDefault();
-    if (!sourcePath.trim()) return;
+  useEffect(() => {
+    let active = true;
+    getDetectedImportSources()
+      .then(
+        (sources) => {
+          if (active) setDetectedSources(sources);
+        },
+        (reason) => {
+          if (active)
+            setDetectionError(
+              reason instanceof Error
+                ? reason.message
+                : "Could not detect removable sources.",
+            );
+        },
+      )
+      .finally(() => {
+        if (active) setDetecting(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function refreshDevices() {
+    setDetecting(true);
+    setDetectionError("");
+    try {
+      setDetectedSources(await getDetectedImportSources());
+    } catch (reason) {
+      setDetectionError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not detect removable sources.",
+      );
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  async function scanPath(path: string) {
+    if (!path.trim()) return;
     setBusy("scan");
     setError("");
     setResult(null);
     try {
-      const nextPlan = await scanGoProImport(
-        activeProjectId,
-        sourcePath.trim(),
-      );
+      const nextPlan = await scanGoProImport(activeProjectId, path.trim());
       setPlan(nextPlan);
       setSourcePath(nextPlan.source);
       setSelectedPaths(
@@ -81,6 +125,11 @@ export function ImportPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  function handleScan(event: FormEvent) {
+    event.preventDefault();
+    void scanPath(sourcePath);
   }
 
   async function handleImport() {
@@ -142,6 +191,69 @@ export function ImportPage() {
         </Text>
       </Box>
 
+      <Stack align="stretch" spacing={3}>
+        <HStack justify="space-between" flexWrap="wrap">
+          <Heading size="md">Detected GoPro sources</Heading>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void refreshDevices()}
+            isLoading={detecting}
+          >
+            Detect GoPro
+          </Button>
+        </HStack>
+        {detectionError && (
+          <Alert status="warning">
+            <AlertIcon />
+            {detectionError}
+          </Alert>
+        )}
+        {detecting && (
+          <HStack role="status">
+            <Spinner size="sm" />
+            <Text>Checking removable media…</Text>
+          </HStack>
+        )}
+        {!detecting && !detectionError && !detectedSources.length && (
+          <Text color="gray.600">
+            No GoPro media detected. Connect a GoPro/SD card and choose Detect
+            GoPro, or enter a source folder below.
+          </Text>
+        )}
+        {detectedSources.map((source) => (
+          <HStack
+            key={source.path}
+            justify="space-between"
+            borderWidth="1px"
+            borderColor="gray.200"
+            borderRadius="md"
+            bg="white"
+            px={3}
+            py={2}
+            flexWrap="wrap"
+          >
+            <Box minWidth={0}>
+              <Text fontWeight="semibold">{source.label}</Text>
+              <Text fontSize="sm" color="gray.600" overflowWrap="anywhere">
+                {source.path}
+              </Text>
+            </Box>
+            <Button
+              size="sm"
+              colorScheme="blue"
+              onClick={() => {
+                setSourcePath(source.path);
+                void scanPath(source.path);
+              }}
+              isDisabled={busy !== null}
+            >
+              Use
+            </Button>
+          </HStack>
+        ))}
+      </Stack>
+
       {error && (
         <Alert status="error">
           <AlertIcon />
@@ -165,7 +277,7 @@ export function ImportPage() {
         </Alert>
       )}
 
-      <Box as="form" onSubmit={(event: FormEvent) => void handleScan(event)}>
+      <Box as="form" onSubmit={handleScan}>
         <HStack align="end" spacing={3} flexWrap="wrap">
           <FormControl maxW="760px">
             <FormLabel>GoPro source folder</FormLabel>

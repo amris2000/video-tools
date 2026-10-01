@@ -135,6 +135,17 @@ export interface ImportResult {
   errors: string[];
 }
 
+export interface DetectedImportSource {
+  path: string;
+  label: string;
+  source_type: "gopro";
+  reason: string;
+}
+
+export function getDetectedImportSources(signal?: AbortSignal) {
+  return api<DetectedImportSource[]>("/api/import-sources", { signal });
+}
+
 export function scanGoProImport(projectId: string, sourcePath: string) {
   return api<ImportPlan>(`${projectPath(projectId)}/imports/scan`, {
     method: "POST",

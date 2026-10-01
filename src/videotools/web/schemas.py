@@ -169,3 +169,10 @@ class ImportResultResponse(BaseModel):
     skipped: int
     conflicts: int
     errors: list[str]
+
+
+class DetectedImportSourceResponse(BaseModel):
+    path: str
+    label: str
+    source_type: Literal["gopro"]
+    reason: str

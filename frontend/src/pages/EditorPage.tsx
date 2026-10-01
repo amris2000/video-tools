@@ -527,7 +527,14 @@ export function EditorPage() {
         spacing={6}
         alignItems="start"
       >
-        <VStack align="stretch" spacing={5} order={{ base: 1, xl: 2 }}>
+        <VStack
+          align="stretch"
+          spacing={5}
+          order={{ base: 1, xl: 2 }}
+          position={{ base: "static", xl: "sticky" }}
+          top={{ xl: 4 }}
+          alignSelf="start"
+        >
           <Heading size="md">Selected occurrence</Heading>
           {!selectedOccurrence ? (
             <Text color="gray.600">
@@ -676,99 +683,111 @@ export function EditorPage() {
             <Heading size="md">Timeline</Heading>
             <Text color="gray.600">{occurrences.length} occurrences</Text>
           </HStack>
-          {!occurrences.length ? (
-            <Text color="gray.600">
-              Add source clips below to begin this edit.
-            </Text>
-          ) : (
-            occurrences.map((item, index) => (
-              <Box
-                key={item.id}
-                borderWidth="1px"
-                borderColor={item.id === selectedId ? "blue.500" : "gray.200"}
-                borderRadius="md"
-                bg="white"
-                px={3}
-                py={2}
-              >
-                <HStack justify="space-between" spacing={3}>
-                  <Button
-                    variant="link"
-                    color="gray.900"
-                    whiteSpace="normal"
-                    height="auto"
-                    minWidth={0}
-                    textAlign="left"
-                    onClick={() => setSelectedId(item.id)}
-                  >
-                    <HStack spacing={3} align="baseline">
-                      <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
-                        {index + 1}. {item.file.split("/").at(-1)}
-                      </Text>
-                      <Text fontSize="xs" color="gray.600" whiteSpace="nowrap">
-                        {seconds(item.start)} → {seconds(item.end)}
-                      </Text>
+          <Box
+            minH={0}
+            maxH={{ base: "none", xl: "calc(100vh - 360px)" }}
+            overflowY={{ base: "visible", xl: "auto" }}
+            overscrollBehavior="contain"
+            pr={{ base: 0, xl: 2 }}
+          >
+            {!occurrences.length ? (
+              <Text color="gray.600">
+                Add source clips below to begin this edit.
+              </Text>
+            ) : (
+              occurrences.map((item, index) => (
+                <Box
+                  key={item.id}
+                  borderWidth="1px"
+                  borderColor={item.id === selectedId ? "blue.500" : "gray.200"}
+                  borderRadius="md"
+                  bg="white"
+                  px={3}
+                  py={2}
+                >
+                  <HStack justify="space-between" spacing={3}>
+                    <Button
+                      variant="link"
+                      color="gray.900"
+                      whiteSpace="normal"
+                      height="auto"
+                      minWidth={0}
+                      textAlign="left"
+                      onClick={() => setSelectedId(item.id)}
+                    >
+                      <HStack spacing={3} align="baseline">
+                        <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
+                          {index + 1}. {item.file.split("/").at(-1)}
+                        </Text>
+                        <Text
+                          fontSize="xs"
+                          color="gray.600"
+                          whiteSpace="nowrap"
+                        >
+                          {seconds(item.start)} → {seconds(item.end)}
+                        </Text>
+                      </HStack>
+                    </Button>
+                    <HStack spacing={0} flexShrink={0}>
+                      <IconButton
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Duplicate occurrence"
+                        title="Duplicate occurrence"
+                        icon={<FiCopy />}
+                        onClick={() => duplicateOccurrence(item.id)}
+                      />
+                      <IconButton
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Move to start"
+                        title="Move to start"
+                        icon={<FiChevronsUp />}
+                        onClick={() => moveOccurrence(item.id, "start")}
+                        isDisabled={index === 0}
+                      />
+                      <IconButton
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Move earlier"
+                        title="Move earlier"
+                        icon={<FiArrowUp />}
+                        onClick={() => moveOccurrence(item.id, "earlier")}
+                        isDisabled={index === 0}
+                      />
+                      <IconButton
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Move later"
+                        title="Move later"
+                        icon={<FiArrowDown />}
+                        onClick={() => moveOccurrence(item.id, "later")}
+                        isDisabled={index === occurrences.length - 1}
+                      />
+                      <IconButton
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Move to end"
+                        title="Move to end"
+                        icon={<FiChevronsDown />}
+                        onClick={() => moveOccurrence(item.id, "end")}
+                        isDisabled={index === occurrences.length - 1}
+                      />
+                      <IconButton
+                        size="sm"
+                        colorScheme="red"
+                        variant="ghost"
+                        aria-label="Remove occurrence"
+                        title="Remove occurrence"
+                        icon={<FiTrash2 />}
+                        onClick={() => removeOccurrence(item.id, index)}
+                      />
                     </HStack>
-                  </Button>
-                  <HStack spacing={0} flexShrink={0}>
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      aria-label="Duplicate occurrence"
-                      title="Duplicate occurrence"
-                      icon={<FiCopy />}
-                      onClick={() => duplicateOccurrence(item.id)}
-                    />
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      aria-label="Move to start"
-                      title="Move to start"
-                      icon={<FiChevronsUp />}
-                      onClick={() => moveOccurrence(item.id, "start")}
-                      isDisabled={index === 0}
-                    />
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      aria-label="Move earlier"
-                      title="Move earlier"
-                      icon={<FiArrowUp />}
-                      onClick={() => moveOccurrence(item.id, "earlier")}
-                      isDisabled={index === 0}
-                    />
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      aria-label="Move later"
-                      title="Move later"
-                      icon={<FiArrowDown />}
-                      onClick={() => moveOccurrence(item.id, "later")}
-                      isDisabled={index === occurrences.length - 1}
-                    />
-                    <IconButton
-                      size="sm"
-                      variant="ghost"
-                      aria-label="Move to end"
-                      title="Move to end"
-                      icon={<FiChevronsDown />}
-                      onClick={() => moveOccurrence(item.id, "end")}
-                      isDisabled={index === occurrences.length - 1}
-                    />
-                    <IconButton
-                      size="sm"
-                      colorScheme="red"
-                      variant="ghost"
-                      aria-label="Remove occurrence"
-                      title="Remove occurrence"
-                      icon={<FiTrash2 />}
-                      onClick={() => removeOccurrence(item.id, index)}
-                    />
                   </HStack>
-                </HStack>
-              </Box>
-            ))
-          )}
+                </Box>
+              ))
+            )}
+          </Box>
         </VStack>
       </SimpleGrid>
       <Divider />

@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from videotools.web.frontend import find_frontend_build
-from videotools.web.routers import config, projects, workflows
+from videotools.web.routers import config, import_sources, projects, workflows
 
 
 app = FastAPI(
@@ -25,6 +25,11 @@ app.include_router(
 
 app.include_router(
     workflows.router,
+    prefix="/api",
+)
+
+app.include_router(
+    import_sources.router,
     prefix="/api",
 )
 
