@@ -10,6 +10,13 @@ import {
   HStack,
   IconButton,
   Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   RangeSlider,
   RangeSliderFilledTrack,
   RangeSliderThumb,
@@ -19,6 +26,7 @@ import {
   Spinner,
   Text,
   VStack,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -31,6 +39,8 @@ import {
   FiPlay,
   FiPlus,
   FiSave,
+  FiSkipBack,
+  FiSkipForward,
   FiTrash2,
 } from "react-icons/fi";
 import { useParams } from "react-router-dom";
@@ -114,6 +124,19 @@ export function EditorPage() {
   const [error, setError] = useState("");
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
+  const {
+    isOpen: isClipPickerOpen,
+    onOpen: openClipPicker,
+    onClose: closeClipPicker,
+  } = useDisclosure();
+  const {
+    isOpen: isQuickPreviewOpen,
+    onOpen: openQuickPreview,
+    onClose: closeQuickPreview,
+  } = useDisclosure();
+  const quickPreviewVideoRef = useRef<HTMLVideoElement>(null);
+  const [quickPreviewIndex, setQuickPreviewIndex] = useState(0);
+  const [quickPreviewError, setQuickPreviewError] = useState("");
 
   const selectedOccurrence =
     occurrences.find((item) => item.id === selectedId) ?? null;
@@ -129,6 +152,11 @@ export function EditorPage() {
     ? (clipByPath.get(projectClipPath(selectedOccurrence.file, clipsPrefix))
         ?.duration ?? null)
     : null;
+  const quickPreviewOccurrence = occurrences[quickPreviewIndex] ?? null;
+  const quickPreviewVideoUrl =
+    isQuickPreviewOpen && quickPreviewOccurrence
+      ? getMediaUrl(activeProjectId, quickPreviewOccurrence.file)
+      : undefined;
 
   useEffect(() => {
     if (!activeProjectId) return;
@@ -287,6 +315,39 @@ export function EditorPage() {
     }
   }
 
+  async function handleSaveAs() {
+    if (!filename) return;
+    const suggested = filename.endsWith(".json")
+      ? filename.replace(/\.json$/i, "-copy.json")
+      : `${filename}-copy`;
+    const nextFilename = window.prompt("Save edit as", suggested)?.trim();
+    if (!nextFilename || nextFilename === filename) return;
+
+    setBusy(true);
+    setError("");
+    let created = false;
+
+    try {
+      await createEdit(activeProjectId, nextFilename);
+      created = true;
+      await saveEdit(activeProjectId, nextFilename, documentValue);
+      await reloadEdits(nextFilename);
+    } catch (reason) {
+      if (created) {
+        try {
+          await deleteEdit(activeProjectId, nextFilename);
+        } catch {
+          // Keep the original error as primary if cleanup fails.
+        }
+      }
+      setError(
+        reason instanceof Error ? reason.message : "Could not save edit as.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleRename() {
     if (!filename || dirty) return;
     const nextFilename = window.prompt("New edit filename", filename);
@@ -357,6 +418,7 @@ export function EditorPage() {
     setOccurrences((current) => [...current, ...added]);
     setSelectedId(added[added.length - 1].id);
     setSelectedClipPaths([]);
+    closeClipPicker();
   }
 
   function updateOccurrence(id: string, changes: Partial<TimelineOccurrence>) {
@@ -429,6 +491,38 @@ export function EditorPage() {
     void video.play();
   }
 
+  function handleOpenQuickPreview() {
+    if (!occurrences.length) return;
+    setQuickPreviewIndex(0);
+    setQuickPreviewError("");
+    openQuickPreview();
+  }
+
+  function handleCloseQuickPreview() {
+    const video = quickPreviewVideoRef.current;
+    if (video) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+    setQuickPreviewError("");
+    closeQuickPreview();
+  }
+
+  function goToNextQuickPreviewClip() {
+    setQuickPreviewIndex((current) => {
+      if (current >= occurrences.length - 1) {
+        quickPreviewVideoRef.current?.pause();
+        return current;
+      }
+      return current + 1;
+    });
+  }
+
+  function goToPreviousQuickPreviewClip() {
+    setQuickPreviewIndex((current) => Math.max(0, current - 1));
+  }
+
   if (!activeProjectId) return null;
   if (loading)
     return (
@@ -490,11 +584,32 @@ export function EditorPage() {
           Save
         </Button>
         <Button
+          leftIcon={<FiCopy />}
+          onClick={() => void handleSaveAs()}
+          isDisabled={!filename || busy}
+        >
+          Save as
+        </Button>
+        <Button
           leftIcon={<FiEdit2 />}
           onClick={() => void handleRename()}
           isDisabled={!filename || dirty || busy}
         >
           Rename
+        </Button>
+        <Button
+          leftIcon={<FiPlus />}
+          onClick={openClipPicker}
+          isDisabled={busy}
+        >
+          Add clips
+        </Button>
+        <Button
+          leftIcon={<FiPlay />}
+          onClick={handleOpenQuickPreview}
+          isDisabled={!occurrences.length || busy}
+        >
+          Quick preview
         </Button>
         <Button
           leftIcon={<FiTrash2 />}
@@ -790,35 +905,169 @@ export function EditorPage() {
           </Box>
         </VStack>
       </SimpleGrid>
-      <Divider />
-      <HStack justify="space-between" align="end" flexWrap="wrap">
-        <Box>
-          <Heading size="md">Source clips</Heading>
-          <Text color="gray.600">
-            Each add creates a separate timeline occurrence.
-          </Text>
-        </Box>
-        <Button
-          leftIcon={<FiPlus />}
-          colorScheme="blue"
-          onClick={addSelectedClips}
-          isDisabled={!selectedClipPaths.length || !filename}
-        >
-          Add selected to timeline ({selectedClipPaths.length})
-        </Button>
-      </HStack>
-      {!filename && (
-        <Text color="orange.700">
-          Create or open an edit before adding clips.
-        </Text>
-      )}
-      <ClipBrowser
-        key={activeProjectId}
-        projectId={activeProjectId}
-        mode="select"
-        selectedClipPaths={selectedClipPaths}
-        onSelectionChange={setSelectedClipPaths}
-      />
+
+      <Modal
+        isOpen={isQuickPreviewOpen}
+        onClose={handleCloseQuickPreview}
+        size="5xl"
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent maxW={{ base: "calc(100vw - 24px)", xl: "1200px" }}>
+          <ModalHeader>Quick preview</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={4}>
+            <VStack align="stretch" spacing={3}>
+              {!quickPreviewOccurrence ? (
+                <Text color="gray.600">No occurrences to preview.</Text>
+              ) : (
+                <>
+                  <Text color="gray.600">
+                    Occurrence {quickPreviewIndex + 1} of {occurrences.length}
+                  </Text>
+                  <Box bg="black" borderRadius="md" overflow="hidden">
+                    <video
+                      key={quickPreviewOccurrence.id}
+                      ref={quickPreviewVideoRef}
+                      src={quickPreviewVideoUrl}
+                      controls
+                      preload="metadata"
+                      style={{ width: "100%", maxHeight: 560 }}
+                      onLoadStart={() => setQuickPreviewError("")}
+                      onLoadedMetadata={(event) => {
+                        event.currentTarget.currentTime =
+                          quickPreviewOccurrence.start;
+                        void event.currentTarget.play().catch(() => {
+                          // Browsers may still block autoplay under strict policies.
+                        });
+                      }}
+                      onError={() =>
+                        setQuickPreviewError(
+                          "Could not load video for quick preview.",
+                        )
+                      }
+                      onTimeUpdate={(event) => {
+                        if (!quickPreviewOccurrence) return;
+                        if (
+                          event.currentTarget.currentTime >=
+                          quickPreviewOccurrence.end
+                        ) {
+                          event.currentTarget.pause();
+                          goToNextQuickPreviewClip();
+                        }
+                      }}
+                    />
+                  </Box>
+                  <Text
+                    color="gray.700"
+                    fontWeight="semibold"
+                    overflowWrap="anywhere"
+                  >
+                    {quickPreviewOccurrence.file}
+                  </Text>
+                  <Text color="gray.600">
+                    {seconds(quickPreviewOccurrence.start)} to{" "}
+                    {seconds(quickPreviewOccurrence.end)}
+                  </Text>
+                </>
+              )}
+              {quickPreviewError && (
+                <Alert status="error">
+                  <AlertIcon />
+                  {quickPreviewError}
+                </Alert>
+              )}
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack>
+              <Button variant="ghost" onClick={handleCloseQuickPreview}>
+                Close
+              </Button>
+              <Button
+                variant="outline"
+                leftIcon={<FiSkipBack />}
+                onClick={goToPreviousQuickPreviewClip}
+                isDisabled={!quickPreviewOccurrence || quickPreviewIndex === 0}
+              >
+                Previous
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!quickPreviewOccurrence) return;
+                  const video = quickPreviewVideoRef.current;
+                  if (!video) return;
+                  video.currentTime = quickPreviewOccurrence.start;
+                  void video.play();
+                }}
+                isDisabled={!quickPreviewOccurrence}
+                leftIcon={<FiPlay />}
+              >
+                Replay current
+              </Button>
+              <Button
+                variant="outline"
+                rightIcon={<FiSkipForward />}
+                onClick={goToNextQuickPreviewClip}
+                isDisabled={
+                  !quickPreviewOccurrence ||
+                  quickPreviewIndex >= occurrences.length - 1
+                }
+              >
+                Next
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={isClipPickerOpen}
+        onClose={closeClipPicker}
+        size="6xl"
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent maxW={{ base: "calc(100vw - 24px)", xl: "1500px" }}>
+          <ModalHeader>Add clips to timeline</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack align="stretch" spacing={4}>
+              <Text color="gray.600">
+                Select clips with checkboxes. Click a clip card (outside
+                checkbox) to preview it.
+              </Text>
+              {!filename && (
+                <Text color="orange.700">
+                  Create or open an edit before adding clips.
+                </Text>
+              )}
+              <ClipBrowser
+                key={activeProjectId}
+                projectId={activeProjectId}
+                mode="select"
+                selectedClipPaths={selectedClipPaths}
+                onSelectionChange={setSelectedClipPaths}
+              />
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack>
+              <Button variant="ghost" onClick={closeClipPicker}>
+                Close
+              </Button>
+              <Button
+                leftIcon={<FiPlus />}
+                colorScheme="blue"
+                onClick={addSelectedClips}
+                isDisabled={!selectedClipPaths.length || !filename}
+              >
+                Add selected to timeline ({selectedClipPaths.length})
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </VStack>
   );
 }

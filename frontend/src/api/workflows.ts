@@ -26,7 +26,7 @@ export interface EditResponse {
 export interface MediaJob {
   job_id: string;
   project_id: string;
-  kind: "render" | "social_export" | "import";
+  kind: "render" | "social_export" | "import" | "probe" | "thumbnails";
   status: "queued" | "running" | "completed" | "failed";
   output_filename: string | null;
   error: string | null;
@@ -67,6 +67,22 @@ export interface ProjectExports {
 export interface SocialOptions {
   presets: { key: string; name: string; description: string }[];
   framing_modes: { key: "crop" | "fit"; name: string }[];
+}
+
+export interface JournalEntryPayload {
+  date: string;
+  activity: string;
+  location: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  tags: string[];
+  highlight: string | null;
+  notes: string | null;
+}
+
+export interface JournalEntry extends JournalEntryPayload {
+  id: string;
+  logged_at: string;
 }
 
 const projectPath = (projectId: string) =>
@@ -229,8 +245,59 @@ export function startSocialExport(
   });
 }
 
+export function startProbe(projectId: string, force = false) {
+  return api<MediaJob>(`${projectPath(projectId)}/probe`, {
+    method: "POST",
+    body: JSON.stringify({ force }),
+  });
+}
+
+export function startThumbnails(projectId: string, force = false) {
+  return api<MediaJob>(`${projectPath(projectId)}/thumbnails`, {
+    method: "POST",
+    body: JSON.stringify({ force }),
+  });
+}
+
 export function getMediaJob(projectId: string, jobId: string) {
   return api<MediaJob>(
     `${projectPath(projectId)}/jobs/${encodeURIComponent(jobId)}`,
+  );
+}
+
+export function getJournalEntries(projectId: string, signal?: AbortSignal) {
+  return api<JournalEntry[]>(`${projectPath(projectId)}/journal`, { signal });
+}
+
+export function createJournalEntry(
+  projectId: string,
+  payload: JournalEntryPayload,
+) {
+  return api<JournalEntry>(`${projectPath(projectId)}/journal`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateJournalEntry(
+  projectId: string,
+  entryId: string,
+  payload: JournalEntryPayload,
+) {
+  return api<JournalEntry>(
+    `${projectPath(projectId)}/journal/${encodeURIComponent(entryId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteJournalEntry(projectId: string, entryId: string) {
+  return api<void>(
+    `${projectPath(projectId)}/journal/${encodeURIComponent(entryId)}`,
+    {
+      method: "DELETE",
+    },
   );
 }

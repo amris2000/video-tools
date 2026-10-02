@@ -12,6 +12,23 @@ export interface Clip {
   fps: number | null;
   creation_time: string | null;
   thumbnail_url: string | null;
+  journal: {
+    date: string | null;
+    activity: string | null;
+    location: string | null;
+    start_time: string | null;
+    end_time: string | null;
+    tags: string[];
+    highlight: string | null;
+  } | null;
+  gps: {
+    available: boolean;
+    latitude: number | null;
+    longitude: number | null;
+    altitude: number | null;
+    speed: number | null;
+    datetime: string | null;
+  } | null;
 }
 
 export function getClips(projectId: string, signal?: AbortSignal) {

@@ -71,6 +71,21 @@ def match_journal_entry(creation_time: str | None, journal: dict, timezone_name:
     return None
 
 
+def project_journal_projection(entry: dict | None) -> dict | None:
+    if not entry:
+        return None
+
+    return {
+        "date": entry.get("date"),
+        "activity": entry.get("activity"),
+        "location": entry.get("location"),
+        "start_time": entry.get("start_time"),
+        "end_time": entry.get("end_time"),
+        "tags": entry.get("tags", []),
+        "highlight": entry.get("highlight"),
+    }
+
+
 def build_format_groups(report_clips):
     counter = Counter(
         (clip["video"]["width"], clip["video"]["height"], clip["video"]["fps"])
@@ -260,15 +275,7 @@ def probe_clip_metadata(
         "journal": None,
     }
     if matched_journal:
-        clip_info["journal"] = {
-            "date": matched_journal.get("date"),
-            "activity": matched_journal.get("activity"),
-            "location": matched_journal.get("location"),
-            "start_time": matched_journal.get("start_time"),
-            "end_time": matched_journal.get("end_time"),
-            "tags": matched_journal.get("tags", []),
-            "highlight": matched_journal.get("highlight"),
-        }
+        clip_info["journal"] = project_journal_projection(matched_journal)
     if audio_stream:
         clip_info["audio"] = {
             "codec": audio_stream.get("codec_name"),
@@ -515,6 +522,21 @@ def analyze_project(
                 thumbnail_relative
                 if thumbnail_file.exists()
                 else None
+            )
+
+            cached_creation_time = cached_clip.get("creation_time")
+            if not isinstance(cached_creation_time, str):
+                cached_creation_time = cached_clip.get("creation_time_local")
+            if not isinstance(cached_creation_time, str):
+                cached_creation_time = None
+
+            refreshed_journal = match_journal_entry(
+                cached_creation_time,
+                journal,
+                timezone_name,
+            )
+            cached_clip["journal"] = project_journal_projection(
+                refreshed_journal
             )
 
             report_clips.append(cached_clip)

@@ -26,6 +26,7 @@ import {
   FiEdit3,
   FiDownload,
   FiPlayCircle,
+  FiBookOpen,
 } from "react-icons/fi";
 import { deleteProject } from "../../api/projects";
 import { useProjects } from "../../context/ProjectContext";
@@ -65,6 +66,12 @@ const navigation = [
     label: "Exports",
     icon: FiFolder,
     path: "/exports",
+    enabled: true,
+  },
+  {
+    label: "Journal",
+    icon: FiBookOpen,
+    path: "/journal",
     enabled: true,
   },
 ];

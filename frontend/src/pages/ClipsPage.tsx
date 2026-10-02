@@ -7,7 +7,9 @@ export function ClipsPage() {
   return (
     <VStack align="stretch" spacing={6}>
       <Heading size="lg">Clips</Heading>
-      {projectId && <ClipBrowser projectId={projectId} mode="view" />}
+      {projectId && (
+        <ClipBrowser projectId={projectId} mode="view" enableDateFilterInView />
+      )}
     </VStack>
   );
 }

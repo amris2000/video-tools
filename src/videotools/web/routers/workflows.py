@@ -19,6 +19,12 @@ from videotools.services.edits import (
 )
 from videotools.services.jobs import JobInProgressError, get_job, start_progress_job
 from videotools.services.imports import create_import_plan, run_import_pipeline
+from videotools.services.journal import (
+    create_entry,
+    delete_entry,
+    list_entries,
+    update_entry,
+)
 from videotools.services.media import (
     parse_byte_range,
     resolve_export_video,
@@ -28,8 +34,10 @@ from videotools.services.media import (
 from videotools.services.workflows import (
     list_exports,
     social_options,
+    start_probe_job,
     start_render,
     start_social_export,
+    start_thumbnails_job,
 )
 from videotools.services.projects import get_project
 from videotools.web.schemas import (
@@ -40,6 +48,10 @@ from videotools.web.schemas import (
     EditSaveRequest,
     EditSummaryResponse,
     ExportsResponse,
+    JournalEntryCreateRequest,
+    JournalEntryResponse,
+    JournalEntryUpdateRequest,
+    MaintenanceRunRequest,
     MediaJobResponse,
     ImportExecuteRequest,
     ImportPlanResponse,
@@ -241,6 +253,85 @@ def post_social_export(
     except Exception as error:
         _raise_service_error(error)
     return _job_response(job)
+
+
+@router.post("/{project_id}/probe", response_model=MediaJobResponse, status_code=202)
+def post_probe(
+    project_id: str,
+    request: MaintenanceRunRequest,
+) -> MediaJobResponse:
+    try:
+        job = start_probe_job(
+            _project(project_id),
+            project_id,
+            force=request.force,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return _job_response(job)
+
+
+@router.post("/{project_id}/thumbnails", response_model=MediaJobResponse, status_code=202)
+def post_thumbnails(
+    project_id: str,
+    request: MaintenanceRunRequest,
+) -> MediaJobResponse:
+    try:
+        job = start_thumbnails_job(
+            _project(project_id),
+            project_id,
+            force=request.force,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return _job_response(job)
+
+
+@router.get("/{project_id}/journal", response_model=list[JournalEntryResponse])
+def get_journal_entries(project_id: str) -> list[dict]:
+    try:
+        return list_entries(_project(project_id))
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.post("/{project_id}/journal", response_model=JournalEntryResponse, status_code=201)
+def post_journal_entry(
+    project_id: str,
+    request: JournalEntryCreateRequest,
+) -> dict:
+    try:
+        return create_entry(
+            _project(project_id),
+            request.model_dump(),
+        )
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.put("/{project_id}/journal/{entry_id}", response_model=JournalEntryResponse)
+def put_journal_entry(
+    project_id: str,
+    entry_id: str,
+    request: JournalEntryUpdateRequest,
+) -> dict:
+    try:
+        return update_entry(
+            _project(project_id),
+            entry_id,
+            request.model_dump(),
+        )
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.delete("/{project_id}/journal/{entry_id}", status_code=204)
+def remove_journal_entry(project_id: str, entry_id: str) -> Response:
+    try:
+        delete_entry(_project(project_id), entry_id)
+    except Exception as error:
+        _raise_service_error(error)
+    return Response(status_code=204)
 
 
 @router.get("/{project_id}/jobs/{job_id}", response_model=MediaJobResponse)

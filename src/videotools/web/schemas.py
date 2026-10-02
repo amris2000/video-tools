@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt
 
 
 class ConfigResponse(BaseModel):
@@ -43,6 +43,57 @@ class ProjectDetailsResponse(ProjectResponse):
 class ProjectCreateRequest(BaseModel):
     name: str
 
+
+class JournalEntryCreateRequest(BaseModel):
+    date: str
+    activity: str
+    location: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    highlight: str | None = None
+    notes: str | None = None
+
+
+class JournalEntryUpdateRequest(JournalEntryCreateRequest):
+    pass
+
+
+class JournalEntryResponse(BaseModel):
+    id: str
+    date: str
+    activity: str
+    location: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    highlight: str | None = None
+    notes: str | None = None
+    logged_at: str
+
+
+class MaintenanceRunRequest(BaseModel):
+    force: bool = False
+
+
+class ClipJournalResponse(BaseModel):
+    date: str | None = None
+    activity: str | None = None
+    location: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    highlight: str | None = None
+
+
+class ClipGpsResponse(BaseModel):
+    available: bool
+    latitude: float | None = None
+    longitude: float | None = None
+    altitude: float | None = None
+    speed: float | None = None
+    datetime: str | None = None
+
 class ClipResponse(BaseModel):
     path: str
     media_path: str
@@ -53,6 +104,8 @@ class ClipResponse(BaseModel):
     fps: float | None = None
     creation_time: str | None = None
     thumbnail_url: str | None = None
+    journal: ClipJournalResponse | None = None
+    gps: ClipGpsResponse | None = None
 
 
 class EditClipDocument(BaseModel):

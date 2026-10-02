@@ -28,6 +28,47 @@ def _dimension(value):
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
 
 
+def _journal_match(value):
+    if not isinstance(value, dict):
+        return None
+
+    tags = value.get("tags")
+    if isinstance(tags, list):
+        cleaned_tags = [str(tag) for tag in tags if str(tag).strip()]
+    else:
+        cleaned_tags = []
+
+    return {
+        "date": value.get("date") if isinstance(value.get("date"), str) else None,
+        "activity": value.get("activity") if isinstance(value.get("activity"), str) else None,
+        "location": value.get("location") if isinstance(value.get("location"), str) else None,
+        "start_time": value.get("start_time") if isinstance(value.get("start_time"), str) else None,
+        "end_time": value.get("end_time") if isinstance(value.get("end_time"), str) else None,
+        "tags": cleaned_tags,
+        "highlight": value.get("highlight") if isinstance(value.get("highlight"), str) else None,
+    }
+
+
+def _gps_match(value):
+    if not isinstance(value, dict):
+        return None
+
+    available = bool(value.get("available"))
+
+    def float_or_none(name):
+        raw = value.get(name)
+        return raw if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None
+
+    return {
+        "available": available,
+        "latitude": float_or_none("latitude"),
+        "longitude": float_or_none("longitude"),
+        "altitude": float_or_none("altitude"),
+        "speed": float_or_none("speed"),
+        "datetime": value.get("datetime") if isinstance(value.get("datetime"), str) else None,
+    }
+
+
 def list_clips(project: VideoProject, project_id: str) -> list[dict]:
     try:
         report = load_existing_report(project.metadata_dir / "clip_report.json")
@@ -66,12 +107,16 @@ def list_clips(project: VideoProject, project_id: str) -> list[dict]:
             thumbnail_url = f"/api/projects/{quote(project_id, safe='')}/thumbnails/{encoded}"
             break
         creation = entry.get("creation_time_local") or entry.get("creation_time")
+        telemetry = entry.get("telemetry")
+        telemetry = telemetry if isinstance(telemetry, dict) else {}
         clips.append(dict(
             path=relative, name=path.name, duration=_number(entry.get("duration")),
             media_path=path.relative_to(project.clips_dir).as_posix(),
             width=_dimension(video.get("width")), height=_dimension(video.get("height")),
             fps=_number(video.get("fps")), creation_time=creation if isinstance(creation, str) else None,
             thumbnail_url=thumbnail_url,
+            journal=_journal_match(entry.get("journal")),
+            gps=_gps_match(telemetry.get("gps")),
         ))
     return clips
 

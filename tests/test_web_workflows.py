@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from videotools.project import VideoProject
+from videotools.services.jobs import MediaJob
 from videotools.services.media import resolve_export_video, resolve_project_media
 from videotools.web.app import app
 
@@ -222,6 +223,88 @@ exports_social = "exports-social"
             [item["filename"] for item in exports["social_exports"]],
             ["vertical.mp4", "normal_instagram.mp4"],
         )
+
+    def test_journal_crud_endpoints(self):
+        created = self.client.post(
+            "/api/projects/workflow-project/journal",
+            json={
+                "date": "2026-10-02",
+                "activity": "Harbor shoot",
+                "location": "Cascais",
+                "start_time": "08:30",
+                "end_time": "10:00",
+                "tags": ["gopro", "b-roll"],
+                "highlight": "Slow pan over boats",
+                "notes": "Use ND filter.",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        created_entry = created.json()
+        entry_id = created_entry["id"]
+
+        listed = self.client.get("/api/projects/workflow-project/journal")
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(len(listed.json()), 1)
+        self.assertEqual(listed.json()[0]["activity"], "Harbor shoot")
+
+        updated = self.client.put(
+            f"/api/projects/workflow-project/journal/{entry_id}",
+            json={
+                "date": "2026-10-02",
+                "activity": "Harbor shoot updated",
+                "location": "Cascais",
+                "start_time": "08:45",
+                "end_time": "10:15",
+                "tags": ["gopro", "sunrise"],
+                "highlight": "Golden light on docks",
+                "notes": "Use wide lens.",
+            },
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["activity"], "Harbor shoot updated")
+
+        deleted = self.client.delete(
+            f"/api/projects/workflow-project/journal/{entry_id}"
+        )
+        self.assertEqual(deleted.status_code, 204)
+
+        empty = self.client.get("/api/projects/workflow-project/journal")
+        self.assertEqual(empty.status_code, 200)
+        self.assertEqual(empty.json(), [])
+
+    def test_probe_and_thumbnails_endpoints_start_jobs(self):
+        probe_job = MediaJob(
+            job_id="probe123",
+            project_id="workflow-project",
+            kind="probe",
+        )
+        thumbnails_job = MediaJob(
+            job_id="thumb123",
+            project_id="workflow-project",
+            kind="thumbnails",
+        )
+
+        with patch(
+            "videotools.web.routers.workflows.start_probe_job",
+            return_value=probe_job,
+        ):
+            response = self.client.post(
+                "/api/projects/workflow-project/probe",
+                json={"force": False},
+            )
+            self.assertEqual(response.status_code, 202)
+            self.assertEqual(response.json()["kind"], "probe")
+
+        with patch(
+            "videotools.web.routers.workflows.start_thumbnails_job",
+            return_value=thumbnails_job,
+        ):
+            response = self.client.post(
+                "/api/projects/workflow-project/thumbnails",
+                json={"force": False},
+            )
+            self.assertEqual(response.status_code, 202)
+            self.assertEqual(response.json()["kind"], "thumbnails")
 
 
 if __name__ == "__main__":
