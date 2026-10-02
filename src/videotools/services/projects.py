@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 import tomllib
 
 from videotools.config import load_config
+from videotools.init_project import create_project
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,62 @@ def get_project(
         return None
 
     return load_project_info(project_directory)
+
+
+def create_project_in_projects_directory(
+    name: str,
+) -> ProjectInfo:
+    if name != name.strip() or not name:
+        raise ValueError("Project name cannot be empty.")
+
+    if name in {".", ".."}:
+        raise ValueError("Invalid project name.")
+
+    if "/" in name or "\\" in name:
+        raise ValueError("Project name cannot contain path separators.")
+
+    if any(character in name for character in '<>:"|?*'):
+        raise ValueError(
+            "Project name contains unsupported characters."
+        )
+
+    projects_directory = get_projects_directory()
+    project_directory = create_project(name, parent=projects_directory)
+
+    info = load_project_info(project_directory)
+
+    if info is None:
+        raise RuntimeError(
+            "Project was created but could not be loaded."
+        )
+
+    return info
+
+
+def delete_project_from_projects_directory(
+    project_id: str,
+) -> None:
+    if project_id in {"", ".", ".."}:
+        raise ValueError("Invalid project id.")
+
+    if "/" in project_id or "\\" in project_id:
+        raise ValueError("Invalid project id.")
+
+    projects_directory = get_projects_directory().resolve()
+    project_directory = (projects_directory / project_id).resolve()
+
+    try:
+        project_directory.relative_to(projects_directory)
+    except ValueError as error:
+        raise ValueError("Invalid project id.") from error
+
+    if not project_directory.is_dir():
+        raise FileNotFoundError("Project not found.")
+
+    if not (project_directory / "project.toml").is_file():
+        raise ValueError("Directory is not a Video Tools project.")
+
+    shutil.rmtree(project_directory)
 
 
 def count_files(

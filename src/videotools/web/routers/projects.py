@@ -6,11 +6,14 @@ from videotools.services.clips import list_clips, resolve_thumbnail
 from videotools.services.projects import (
     ProjectInfo,
     calculate_project_stats,
+    create_project_in_projects_directory,
+    delete_project_from_projects_directory,
     discover_projects,
     get_project,
 )
 from videotools.web.schemas import (
     ClipResponse,
+    ProjectCreateRequest,
     ProjectDetailsResponse,
     ProjectPathsResponse,
     ProjectResponse,
@@ -62,6 +65,65 @@ def get_projects() -> list[ProjectResponse]:
         project_response(project)
         for project in projects
     ]
+
+
+@router.post(
+    "",
+    response_model=ProjectResponse,
+    status_code=201,
+)
+def create_project_endpoint(
+    request: ProjectCreateRequest,
+) -> ProjectResponse:
+    try:
+        project = create_project_in_projects_directory(
+            request.name
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
+    except FileExistsError as error:
+        raise HTTPException(
+            status_code=409,
+            detail=str(error),
+        ) from error
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=409,
+            detail=str(error),
+        ) from error
+
+    return project_response(project)
+
+
+@router.delete(
+    "/{project_id}",
+    status_code=204,
+)
+def delete_project_endpoint(
+    project_id: str,
+) -> None:
+    try:
+        delete_project_from_projects_directory(
+            project_id
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        ) from error
+    except FileNotFoundError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=str(error),
+        ) from error
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=409,
+            detail=str(error),
+        ) from error
 
 
 @router.get(

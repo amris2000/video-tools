@@ -39,6 +39,10 @@ class ProjectStatsResponse(BaseModel):
 class ProjectDetailsResponse(ProjectResponse):
     stats: ProjectStatsResponse
 
+
+class ProjectCreateRequest(BaseModel):
+    name: str
+
 class ClipResponse(BaseModel):
     path: str
     media_path: str

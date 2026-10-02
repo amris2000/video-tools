@@ -28,8 +28,25 @@ export interface ProjectDetails extends Project {
   stats: ProjectStats;
 }
 
+export interface ProjectCreateRequest {
+  name: string;
+}
+
 export function getProjects(): Promise<Project[]> {
   return api<Project[]>("/api/projects");
+}
+
+export function createProject(request: ProjectCreateRequest): Promise<Project> {
+  return api<Project>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+export function deleteProject(projectId: string): Promise<void> {
+  return api<void>(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
 }
 
 export function getProject(
