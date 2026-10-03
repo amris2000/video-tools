@@ -54,6 +54,16 @@ def resolve_export_video(
     return target
 
 
+def delete_export_video(
+    project: VideoProject,
+    filename: str,
+    *,
+    social: bool = False,
+) -> None:
+    target = resolve_export_video(project, filename, social=social)
+    target.unlink()
+
+
 def parse_byte_range(value: str, file_size: int) -> tuple[int | None, int | None]:
     if not value.startswith("bytes=") or "," in value:
         return None, None

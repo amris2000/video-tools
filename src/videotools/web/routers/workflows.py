@@ -26,6 +26,7 @@ from videotools.services.journal import (
     update_entry,
 )
 from videotools.services.media import (
+    delete_export_video,
     parse_byte_range,
     resolve_export_video,
     resolve_project_media,
@@ -176,6 +177,15 @@ def get_export_media(project_id: str, filename: str, request: Request):
     return _stream_response(path, request.headers.get("range"))
 
 
+@router.delete("/{project_id}/exports/{filename}", status_code=204)
+def remove_export_media(project_id: str, filename: str) -> Response:
+    try:
+        delete_export_video(_project(project_id), filename)
+    except Exception as error:
+        _raise_service_error(error)
+    return Response(status_code=204)
+
+
 @router.get("/{project_id}/social-exports/{filename}")
 def get_social_export_media(project_id: str, filename: str, request: Request):
     try:
@@ -183,6 +193,15 @@ def get_social_export_media(project_id: str, filename: str, request: Request):
     except Exception as error:
         _raise_service_error(error)
     return _stream_response(path, request.headers.get("range"))
+
+
+@router.delete("/{project_id}/social-exports/{filename}", status_code=204)
+def remove_social_export_media(project_id: str, filename: str) -> Response:
+    try:
+        delete_export_video(_project(project_id), filename, social=True)
+    except Exception as error:
+        _raise_service_error(error)
+    return Response(status_code=204)
 
 
 @router.get("/{project_id}/social-options", response_model=SocialOptionsResponse)

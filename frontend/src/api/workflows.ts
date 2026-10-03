@@ -212,6 +212,20 @@ export function getExportUrl(
   return `${projectPath(projectId)}/${collection}/${encodeURIComponent(filename)}`;
 }
 
+export function deleteExportFile(
+  projectId: string,
+  filename: string,
+  social = false,
+) {
+  const collection = social ? "social-exports" : "exports";
+  return api<void>(
+    `${projectPath(projectId)}/${collection}/${encodeURIComponent(filename)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
 export function getProjectExports(projectId: string, signal?: AbortSignal) {
   return api<ProjectExports>(`${projectPath(projectId)}/exports`, { signal });
 }
