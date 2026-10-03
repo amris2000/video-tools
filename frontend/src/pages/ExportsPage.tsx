@@ -83,7 +83,10 @@ function ExportSection({
               borderColor="gray.200"
               borderRadius="md"
               overflow="hidden"
-              _hover={{ borderColor: "blue.400", transform: "translateY(-1px)" }}
+              _hover={{
+                borderColor: "blue.400",
+                transform: "translateY(-1px)",
+              }}
             >
               <Button
                 type="button"
@@ -133,7 +136,10 @@ function ExportSection({
                     variant="ghost"
                     leftIcon={<FiTrash2 />}
                     onClick={() => onDelete(file, social)}
-                    isLoading={deleting === `${social ? "social" : "render"}:${file.filename}`}
+                    isLoading={
+                      deleting ===
+                      `${social ? "social" : "render"}:${file.filename}`
+                    }
                   >
                     Delete
                   </Button>
@@ -553,12 +559,10 @@ export function ExportsPage() {
               Delete export
             </AlertDialogHeader>
             <AlertDialogBody>
-              This will permanently delete
-              {" "}
+              This will permanently delete{" "}
               <Text as="span" fontWeight="semibold" overflowWrap="anywhere">
                 {pendingDelete?.file.filename}
-              </Text>
-              {" "}
+              </Text>{" "}
               from this project. Continue?
             </AlertDialogBody>
             <AlertDialogFooter>
