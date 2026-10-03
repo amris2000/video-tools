@@ -247,11 +247,24 @@ export function RenderPage() {
       )}
 
       {completed && (
-        <Box bg="black" borderRadius="md" overflow="hidden" maxW="1000px">
+        <Box
+          bg="black"
+          borderRadius="md"
+          overflow="hidden"
+          maxW="1000px"
+          display="flex"
+          justifyContent="center"
+        >
           <video
             controls
             preload="metadata"
-            style={{ width: "100%", maxHeight: 560 }}
+            style={{
+              display: "block",
+              width: "auto",
+              height: "auto",
+              maxWidth: "100%",
+              maxHeight: 560,
+            }}
             src={getExportUrl(activeProjectId, completed)}
           />
         </Box>

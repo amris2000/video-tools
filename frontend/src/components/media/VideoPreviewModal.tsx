@@ -1,5 +1,5 @@
 import {
-  AspectRatio,
+  Box,
   HStack,
   Modal,
   ModalBody,
@@ -54,11 +54,12 @@ export function VideoPreviewModal({
         <ModalCloseButton />
         <ModalBody pb={6}>
           <Stack spacing={4}>
-            <AspectRatio
-              ratio={16 / 9}
+            <Box
               bg="black"
               borderRadius="md"
               overflow="hidden"
+              display="flex"
+              justifyContent="center"
             >
               <video
                 key={videoUrl}
@@ -66,10 +67,17 @@ export function VideoPreviewModal({
                 src={isOpen && videoUrl ? videoUrl : undefined}
                 controls
                 preload="metadata"
+                style={{
+                  display: "block",
+                  width: "auto",
+                  height: "auto",
+                  maxWidth: "100%",
+                  maxHeight: "calc(100vh - 220px)",
+                }}
                 onLoadStart={() => setMediaError(false)}
                 onError={() => setMediaError(true)}
               />
-            </AspectRatio>
+            </Box>
             {mediaError && (
               <Stack spacing={1}>
                 <Text color="red.600">Could not load this video.</Text>
