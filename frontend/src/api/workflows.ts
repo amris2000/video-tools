@@ -26,7 +26,13 @@ export interface EditResponse {
 export interface MediaJob {
   job_id: string;
   project_id: string;
-  kind: "render" | "social_export" | "import" | "organize" | "probe" | "thumbnails";
+  kind:
+    | "render"
+    | "social_export"
+    | "import"
+    | "organize"
+    | "probe"
+    | "thumbnails";
   status: "queued" | "running" | "completed" | "failed";
   output_filename: string | null;
   error: string | null;

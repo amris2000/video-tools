@@ -402,50 +402,54 @@ export function ImportPage() {
                       ? "Everything is up to date."
                       : "Import pipeline complete"}
             </Text>
-            {(["import", "organize", "thumbnails", "probe"] as const).map((name) => {
-              const stage = stages?.[name] ?? {
-                status: "waiting" as const,
-                current_file: null,
-                completed: 0,
-                total: 0,
-                errors: [],
-              };
-              const stateText =
-                stage.status === "running"
-                  ? stage.current_file || "Starting…"
-                  : stage.status === "failed"
-                    ? "Completed with errors"
-                    : stage.status === "completed"
-                      ? stage.total === 0
-                        ? "DONE · 0 needed"
-                        : "DONE"
-                      : "Waiting…";
-              return (
-                <Stack key={name} spacing={0}>
-                  <HStack justify="space-between" spacing={4}>
-                    <Text fontSize="sm" fontWeight="medium">
-                      {stageLabels[name]}
-                    </Text>
-                    <Text
-                      fontSize="sm"
-                      color={stage.status === "failed" ? "red.600" : "gray.700"}
-                      textAlign="right"
-                    >
-                      {stateText} · {stage.completed} / {stage.total}
-                    </Text>
-                  </HStack>
-                  {stage.errors.map((message, index) => (
-                    <Text
-                      key={`${index}-${message}`}
-                      fontSize="xs"
-                      color="red.600"
-                    >
-                      {message}
-                    </Text>
-                  ))}
-                </Stack>
-              );
-            })}
+            {(["import", "organize", "thumbnails", "probe"] as const).map(
+              (name) => {
+                const stage = stages?.[name] ?? {
+                  status: "waiting" as const,
+                  current_file: null,
+                  completed: 0,
+                  total: 0,
+                  errors: [],
+                };
+                const stateText =
+                  stage.status === "running"
+                    ? stage.current_file || "Starting…"
+                    : stage.status === "failed"
+                      ? "Completed with errors"
+                      : stage.status === "completed"
+                        ? stage.total === 0
+                          ? "DONE · 0 needed"
+                          : "DONE"
+                        : "Waiting…";
+                return (
+                  <Stack key={name} spacing={0}>
+                    <HStack justify="space-between" spacing={4}>
+                      <Text fontSize="sm" fontWeight="medium">
+                        {stageLabels[name]}
+                      </Text>
+                      <Text
+                        fontSize="sm"
+                        color={
+                          stage.status === "failed" ? "red.600" : "gray.700"
+                        }
+                        textAlign="right"
+                      >
+                        {stateText} · {stage.completed} / {stage.total}
+                      </Text>
+                    </HStack>
+                    {stage.errors.map((message, index) => (
+                      <Text
+                        key={`${index}-${message}`}
+                        fontSize="xs"
+                        color="red.600"
+                      >
+                        {message}
+                      </Text>
+                    ))}
+                  </Stack>
+                );
+              },
+            )}
             {job.status === "failed" && job.error && (
               <Text fontSize="sm" color="red.600">
                 {job.error}
