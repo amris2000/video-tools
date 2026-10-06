@@ -19,6 +19,7 @@ import { useParams } from "react-router-dom";
 import { getProject, type ProjectDetails } from "../api/projects";
 import {
   getMediaJob,
+  startOrganize,
   startProbe,
   startThumbnails,
   type MediaJob,
@@ -109,6 +110,22 @@ export function OverviewPage() {
       window.clearInterval(timer);
     };
   }, [projectId, maintenanceJob?.job_id, maintenanceJob?.status]);
+
+  async function startOrganizeJob() {
+    if (!projectId) {
+      return;
+    }
+
+    setMaintenanceError(null);
+
+    try {
+      setMaintenanceJob(await startOrganize(projectId));
+    } catch (err) {
+      setMaintenanceError(
+        err instanceof Error ? err.message : "Could not start organizing.",
+      );
+    }
+  }
 
   async function startProbeJob() {
     if (!projectId) {
@@ -217,6 +234,14 @@ export function OverviewPage() {
             >
               Generate thumbnails
             </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => void startOrganizeJob()}
+              isDisabled={jobRunning}
+            >
+              Organize clips
+            </Button>
           </HStack>
 
           {maintenanceError && (
@@ -243,7 +268,9 @@ export function OverviewPage() {
                     ? "Probe"
                     : maintenanceJob.kind === "thumbnails"
                       ? "Thumbnails"
-                      : "Maintenance"}{" "}
+                      : maintenanceJob.kind === "organize"
+                        ? "Organize"
+                        : "Maintenance"}{" "}
                   {maintenanceJob.status === "queued"
                     ? "queued"
                     : maintenanceJob.status === "running"
@@ -267,6 +294,17 @@ export function OverviewPage() {
                       : 0}
                   </Text>
                 )}
+
+                {maintenanceJob.status === "completed" &&
+                  maintenanceJob.kind === "organize" &&
+                  maintenanceJob.result &&
+                  "moved" in maintenanceJob.result && (
+                    <Text fontSize="sm">
+                      Moved {maintenanceJob.result.moved} · Skipped{" "}
+                      {maintenanceJob.result.skipped} · Failed{" "}
+                      {maintenanceJob.result.failed}
+                    </Text>
+                  )}
 
                 {maintenanceJob.error && (
                   <Text fontSize="sm">{maintenanceJob.error}</Text>

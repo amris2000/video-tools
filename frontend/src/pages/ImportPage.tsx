@@ -48,6 +48,7 @@ const statusLabels = {
 
 const stageLabels = {
   import: "Importing",
+  organize: "Organizing",
   thumbnails: "Thumbnails",
   probe: "Probing",
 } as const;
@@ -401,7 +402,7 @@ export function ImportPage() {
                       ? "Everything is up to date."
                       : "Import pipeline complete"}
             </Text>
-            {(["import", "thumbnails", "probe"] as const).map((name) => {
+            {(["import", "organize", "thumbnails", "probe"] as const).map((name) => {
               const stage = stages?.[name] ?? {
                 status: "waiting" as const,
                 current_file: null,

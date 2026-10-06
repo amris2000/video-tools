@@ -35,6 +35,7 @@ from videotools.services.media import (
 from videotools.services.workflows import (
     list_exports,
     social_options,
+    start_organize_job,
     start_probe_job,
     start_render,
     start_social_export,
@@ -269,6 +270,15 @@ def post_social_export(
             request.preset,
             request.framing,
         )
+    except Exception as error:
+        _raise_service_error(error)
+    return _job_response(job)
+
+
+@router.post("/{project_id}/organize", response_model=MediaJobResponse, status_code=202)
+def post_organize(project_id: str) -> MediaJobResponse:
+    try:
+        job = start_organize_job(_project(project_id), project_id)
     except Exception as error:
         _raise_service_error(error)
     return _job_response(job)

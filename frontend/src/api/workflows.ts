@@ -26,12 +26,12 @@ export interface EditResponse {
 export interface MediaJob {
   job_id: string;
   project_id: string;
-  kind: "render" | "social_export" | "import" | "probe" | "thumbnails";
+  kind: "render" | "social_export" | "import" | "organize" | "probe" | "thumbnails";
   status: "queued" | "running" | "completed" | "failed";
   output_filename: string | null;
   error: string | null;
   progress?: ImportJobProgress | null;
-  result?: ImportResult | null;
+  result?: ImportResult | OrganizeResult | null;
 }
 
 export interface ImportStageProgress {
@@ -43,9 +43,10 @@ export interface ImportStageProgress {
 }
 
 export interface ImportJobProgress {
-  stage: "import" | "thumbnails" | "probe" | null;
+  stage: "import" | "organize" | "thumbnails" | "probe" | null;
   stages: {
     import: ImportStageProgress;
+    organize: ImportStageProgress;
     thumbnails: ImportStageProgress;
     probe: ImportStageProgress;
   };
@@ -171,6 +172,14 @@ export interface ImportResult {
   everything_up_to_date?: boolean;
 }
 
+export interface OrganizeResult {
+  total: number;
+  moved: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+}
+
 export interface DetectedImportSource {
   path: string;
   label: string;
@@ -263,6 +272,12 @@ export function startProbe(projectId: string, force = false) {
   return api<MediaJob>(`${projectPath(projectId)}/probe`, {
     method: "POST",
     body: JSON.stringify({ force }),
+  });
+}
+
+export function startOrganize(projectId: string) {
+  return api<MediaJob>(`${projectPath(projectId)}/organize`, {
+    method: "POST",
   });
 }
 

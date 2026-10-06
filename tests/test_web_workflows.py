@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from videotools.project import VideoProject
 from videotools.services.jobs import MediaJob
 from videotools.services.media import resolve_export_video, resolve_project_media
+from videotools.services.organize import organize_project_clips
 from videotools.web.app import app
 
 
@@ -305,6 +306,75 @@ exports_social = "exports-social"
             )
             self.assertEqual(response.status_code, 202)
             self.assertEqual(response.json()["kind"], "thumbnails")
+
+    def test_organize_endpoint_starts_job(self):
+        organize_job = MediaJob(
+            job_id="organize123",
+            project_id="workflow-project",
+            kind="organize",
+        )
+
+        with patch(
+            "videotools.web.routers.workflows.start_organize_job",
+            return_value=organize_job,
+        ) as start:
+            response = self.client.post(
+                "/api/projects/workflow-project/organize"
+            )
+            self.assertEqual(response.status_code, 202)
+            self.assertEqual(response.json()["kind"], "organize")
+            start.assert_called_once()
+
+    def test_organize_service_moves_loose_clips_into_date_folders(self):
+        loose = self.project.clips_dir / "loose.mp4"
+        loose.write_bytes(b"loose-clip")
+        date_dir = self.project.clips_dir / "20260315"
+        date_dir.mkdir()
+        (date_dir / "duplicate.mp4").write_bytes(b"already-here")
+        loose_duplicate = self.project.clips_dir / "duplicate.mp4"
+        loose_duplicate.write_bytes(b"conflicting")
+
+        def fake_probe(path):
+            return {
+                "format": {
+                    "tags": {"creation_time": "2026-03-15T12:00:00Z"}
+                }
+            }
+
+        with patch(
+            "videotools.services.organize.probe_video",
+            side_effect=fake_probe,
+        ):
+            result = organize_project_clips(self.project)
+
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(result["moved"], 1)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(result["failed"], 0)
+        self.assertEqual(result["errors"], [])
+        self.assertFalse(loose.exists())
+        self.assertTrue((date_dir / "loose.mp4").is_file())
+        self.assertTrue(loose_duplicate.exists())
+        # Clips already inside folders are left completely alone.
+        self.assertTrue(
+            (self.project.clips_dir / "day-one" / "same.mp4").is_file()
+        )
+
+    def test_organize_service_reports_failures(self):
+        broken = self.project.clips_dir / "broken.mp4"
+        broken.write_bytes(b"broken")
+
+        with patch(
+            "videotools.services.organize.probe_video",
+            side_effect=RuntimeError("ffprobe missing"),
+        ):
+            result = organize_project_clips(self.project)
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["moved"], 0)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["errors"], ["broken.mp4: ffprobe missing"])
+        self.assertTrue(broken.exists())
 
 
 if __name__ == "__main__":

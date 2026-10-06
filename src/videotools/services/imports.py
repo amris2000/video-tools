@@ -16,6 +16,7 @@ from videotools.services.gopro_camera import (
     list_camera_media,
     usb_camera_base_url,
 )
+from videotools.services.organize import organize_project_clips
 from videotools.thumbnails import generate_thumbnail, thumbnail_name
 
 
@@ -198,7 +199,7 @@ def run_import_pipeline(
             "total": 0,
             "errors": [],
         }
-        for name in ("import", "thumbnails", "probe")
+        for name in ("import", "organize", "thumbnails", "probe")
     }
     progress: dict[str, Any] = {"stage": "import", "stages": stages}
 
@@ -260,6 +261,44 @@ def run_import_pipeline(
         completed=max(stages["import"]["completed"], stages["import"]["total"]),
     )
     skipped = copy_result["skipped"]
+
+    # Organize the newly imported loose clips into date folders before
+    # thumbnails and probing so those stages see the final clip locations.
+    organize_targets = sorted(
+        path for path in imported_paths if path.is_file()
+    )
+    stages["organize"].update(
+        status="running" if organize_targets else "completed",
+        completed=0,
+        total=len(organize_targets),
+    )
+    progress["stage"] = "organize"
+    publish()
+
+    if organize_targets:
+        organize_result = organize_project_clips(
+            project,
+            organize_targets,
+            progress_callback=lambda event: _update_organize_progress(
+                event, progress, stages, add_error, publish
+            ),
+        )
+        for message in organize_result["errors"]:
+            add_error("organize", message)
+        destinations = {
+            entry["clip"]: entry["destination"]
+            for entry in organize_result["entries"]
+        }
+        imported_paths = {
+            Path(destinations.get(str(path)) or path).resolve()
+            for path in imported_paths
+        }
+
+    stages["organize"].update(
+        status="failed" if stages["organize"]["errors"] else "completed",
+        current_file=None,
+    )
+    publish()
 
     local_matches = _project_clip_candidates(project)
     target_clips: dict[Path, Path] = {}
@@ -376,6 +415,25 @@ def _update_import_progress(
     if event.get("error"):
         add_error("import", f"{event.get('current_file') or 'Import'}: {event['error']}")
     progress["stage"] = "import"
+    publish()
+
+
+def _update_organize_progress(
+    event: dict[str, Any],
+    progress: dict[str, Any],
+    stages: dict[str, dict[str, Any]],
+    add_error: Callable[[str, str], None],
+    publish: Callable[[], None],
+) -> None:
+    stage = stages["organize"]
+    stage.update(
+        status="running" if event["status"] == "running" else stage["status"],
+        current_file=event.get("current_file") if event["status"] == "running" else None,
+        completed=event.get("completed", stage["completed"]),
+    )
+    if event.get("outcome") == "failed" and event.get("detail"):
+        add_error("organize", f"{event.get('current_file') or 'Organize'}: {event['detail']}")
+    progress["stage"] = "organize"
     publish()
 
 

@@ -1,46 +1,28 @@
-from pathlib import Path
-import shutil
+"""CLI wrapper around the reusable clip-organization service."""
 
-from videotools.metadata import (
-    VIDEO_EXTENSIONS,
-    get_creation_time,
-    parse_creation_time,
-    probe_video,
+from pathlib import Path
+
+from videotools.project import VideoProject
+from videotools.services.organize import (
+    list_loose_clips,
+    organize_project_clips,
 )
-from videotools.project import load_project_config
 
 
 def organize_clips(project_root: Path):
     project_root = Path(project_root).resolve()
 
-    clips_dir = project_root / "clips"
-
-    if not clips_dir.exists():
-        raise RuntimeError(
-            f"Clips directory does not exist: {clips_dir}"
-        )
-
-    config = load_project_config(project_root)
-
-    timezone_name = config.get(
-        "timezone",
-        "Europe/Copenhagen",
-    )
+    project = VideoProject.load(project_root)
 
     # Important:
     # Only inspect files directly inside clips/.
     # Existing folders are left completely alone.
-    clips = sorted(
-        path
-        for path in clips_dir.iterdir()
-        if path.is_file()
-        and path.suffix.lower() in VIDEO_EXTENSIONS
-    )
+    clips = list_loose_clips(project)
 
     if not clips:
         print()
         print("No loose video clips found.")
-        print(f"Nothing to organize in: {clips_dir}")
+        print(f"Nothing to organize in: {project.clips_dir}")
         return
 
     print()
@@ -49,83 +31,32 @@ def organize_clips(project_root: Path):
     print("=" * 60)
     print()
 
-    moved = 0
-    skipped = 0
-    failed = 0
-
-    for index, clip in enumerate(clips, start=1):
-        print(
-            f"[{index}/{len(clips)}] "
-            f"{clip.name}"
-        )
-
-        try:
-            info = probe_video(clip)
-
-            creation_time = get_creation_time(info)
-
-            if not creation_time:
-                print("  SKIP: no creation timestamp found")
-                skipped += 1
-                continue
-
-            local_time = parse_creation_time(
-                creation_time,
-                timezone_name,
-            )
-
-            if local_time is None:
-                print("  SKIP: could not parse creation timestamp")
-                skipped += 1
-                continue
-
-            date_folder = local_time.strftime(
-                "%Y%m%d"
-            )
-
-            destination_dir = (
-                clips_dir / date_folder
-            )
-
-            destination = (
-                destination_dir / clip.name
-            )
-
-            # Never overwrite an existing file.
-            if destination.exists():
-                print(
-                    f"  SKIP: already exists in "
-                    f"{date_folder}/"
-                )
-                skipped += 1
-                continue
-
-            destination_dir.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            shutil.move(
-                str(clip),
-                str(destination),
-            )
-
+    def print_event(event: dict) -> None:
+        if event["status"] == "running":
             print(
-                f"  -> {date_folder}/{clip.name}"
+                f"[{event['completed'] + 1}/{event['total']}] "
+                f"{event['current_file']}"
             )
+            return
 
-            moved += 1
+        outcome = event.get("outcome")
+        if outcome == "moved":
+            print(f"  -> {event['detail']}")
+        elif outcome == "skipped":
+            print(f"  SKIP: {event['detail']}")
+        else:
+            print(f"  ERROR: {event['detail']}")
 
-        except Exception as error:
-            print(
-                f"  ERROR: {error}"
-            )
-            failed += 1
+    result = organize_project_clips(
+        project,
+        clips,
+        progress_callback=print_event,
+    )
 
     print()
     print("=" * 60)
     print("ORGANIZE COMPLETE")
     print("=" * 60)
-    print(f"Moved:   {moved}")
-    print(f"Skipped: {skipped}")
-    print(f"Failed:  {failed}")
+    print(f"Moved:   {result['moved']}")
+    print(f"Skipped: {result['skipped']}")
+    print(f"Failed:  {result['failed']}")

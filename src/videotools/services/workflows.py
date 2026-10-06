@@ -14,6 +14,7 @@ from videotools.render import render_accurate, render_fast
 from videotools.services.edits import edit_path
 from videotools.services.jobs import MediaJob, start_job, start_progress_job
 from videotools.services.media import resolve_export_video
+from videotools.services.organize import organize_project_clips
 from videotools.social import (
     FramingMode,
     SOCIAL_PRESETS,
@@ -84,6 +85,20 @@ def start_social_export(
             output=output,
             preset=preset,
             framing=cast(FramingMode, selected_framing),
+        ),
+    )
+
+
+def start_organize_job(
+    project: VideoProject,
+    project_id: str,
+) -> MediaJob:
+    return start_progress_job(
+        project_id,
+        "organize",
+        lambda update: organize_project_clips(
+            project,
+            progress_callback=update,
         ),
     )
 
