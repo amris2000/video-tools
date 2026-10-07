@@ -38,6 +38,9 @@ export function RenderPage() {
   const [job, setJob] = useState<MediaJob | null>(null);
   const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [renderDurationSeconds, setRenderDurationSeconds] = useState<
+    number | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const jobId = job?.job_id;
@@ -101,7 +104,16 @@ export function RenderPage() {
     const poll = async () => {
       try {
         const updated = await getMediaJob(activeProjectId, jobId);
-        if (active) setJob(updated);
+        if (!active) return;
+        setJob(updated);
+        if (
+          ["completed", "failed"].includes(updated.status) &&
+          jobStartedAt !== null
+        ) {
+          setRenderDurationSeconds(
+            Math.floor((Date.now() - jobStartedAt) / 1000),
+          );
+        }
       } catch (reason) {
         if (active)
           setError(
@@ -119,7 +131,7 @@ export function RenderPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [activeProjectId, jobId, jobStatus]);
+  }, [activeProjectId, jobId, jobStatus, jobStartedAt]);
 
   useEffect(() => {
     if (
@@ -143,6 +155,7 @@ export function RenderPage() {
     const startedAt = Date.now();
     setJobStartedAt(startedAt);
     setElapsedSeconds(0);
+    setRenderDurationSeconds(null);
     try {
       setJob(await startRender(activeProjectId, editFilename, mode, useGpu));
     } catch (reason) {
@@ -290,6 +303,11 @@ export function RenderPage() {
             </Text>
             {job.status === "failed" && <Text>{job.error}</Text>}
             {completed && <Text>{job.output_filename}</Text>}
+            {completed && renderDurationSeconds !== null && (
+              <Text fontSize="sm">
+                Total render time: {formatElapsed(renderDurationSeconds)}
+              </Text>
+            )}
             {running && (
               <Text fontSize="sm">
                 Elapsed: {formatElapsed(elapsedSeconds)} · This operation

@@ -10,6 +10,7 @@ import {
   AspectRatio,
   Box,
   Button,
+  Checkbox,
   Divider,
   FormControl,
   FormLabel,
@@ -30,9 +31,11 @@ import {
   getExportUrl,
   getMediaJob,
   getProjectExports,
+  getSocialGpuStatus,
   getSocialOptions,
   startSocialExport,
   type ExportFile,
+  type GpuStatus,
   type MediaJob,
   type ProjectExports,
   type SocialOptions,
@@ -168,6 +171,8 @@ export function ExportsPage() {
   const [sourceFilename, setSourceFilename] = useState("");
   const [preset, setPreset] = useState("");
   const [framing, setFraming] = useState<"crop" | "fit">("crop");
+  const [useGpu, setUseGpu] = useState(false);
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
   const [job, setJob] = useState<MediaJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -184,6 +189,8 @@ export function ExportsPage() {
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const jobId = job?.job_id;
   const jobStatus = job?.status;
+  const completedOutput =
+    job?.status === "completed" ? job.output_filename : null;
 
   async function refreshExports() {
     const result = await getProjectExports(activeProjectId);
@@ -227,34 +234,30 @@ export function ExportsPage() {
   }, [activeProjectId]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    getSocialGpuStatus(activeProjectId, controller.signal)
+      .then((status) => {
+        if (active) setGpuStatus(status);
+      })
+      .catch(() => {
+        if (active)
+          setGpuStatus({ available: false, encoder: null, reason: null });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [activeProjectId]);
+
+  useEffect(() => {
     if (!jobId || !jobStatus || !["queued", "running"].includes(jobStatus))
       return;
     let active = true;
     const poll = async () => {
       try {
         const updated = await getMediaJob(activeProjectId, jobId);
-        if (!active) return;
-        setJob(updated);
-        if (updated.status === "completed") {
-          const fileList = await getProjectExports(activeProjectId);
-          if (active) {
-            setExports(fileList);
-            setViewMode("social");
-            if (updated.output_filename) {
-              const created = fileList.social_exports.find(
-                (item) => item.filename === updated.output_filename,
-              );
-              if (created) {
-                setPreview({ file: created, social: true });
-              }
-            }
-            setSourceFilename((current) =>
-              fileList.renders.some((item) => item.filename === current)
-                ? current
-                : (fileList.renders[0]?.filename ?? ""),
-            );
-          }
-        }
+        if (active) setJob(updated);
       } catch (reason) {
         if (active)
           setError(
@@ -273,6 +276,41 @@ export function ExportsPage() {
       window.clearInterval(timer);
     };
   }, [activeProjectId, jobId, jobStatus]);
+
+  useEffect(() => {
+    if (!completedOutput) return;
+    let active = true;
+    const refreshCompleted = async () => {
+      try {
+        const fileList = await getProjectExports(activeProjectId);
+        if (!active) return;
+        setExports(fileList);
+        setViewMode("social");
+        const created = fileList.social_exports.find(
+          (item) => item.filename === completedOutput,
+        );
+        if (created) {
+          setPreview({ file: created, social: true });
+        }
+        setSourceFilename((current) =>
+          fileList.renders.some((item) => item.filename === current)
+            ? current
+            : (fileList.renders[0]?.filename ?? ""),
+        );
+      } catch (reason) {
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Could not refresh exports.",
+          );
+      }
+    };
+    void refreshCompleted();
+    return () => {
+      active = false;
+    };
+  }, [activeProjectId, completedOutput]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -303,6 +341,7 @@ export function ExportsPage() {
           sourceFilename,
           preset,
           framing,
+          useGpu,
         ),
       );
     } catch (reason) {
@@ -413,61 +452,90 @@ export function ExportsPage() {
                 A normal render is required before social conversion.
               </Text>
             ) : (
-              <HStack align="end" spacing={3} flexWrap="wrap">
-                <FormControl maxW="360px">
-                  <FormLabel>Source render</FormLabel>
-                  <Select
-                    value={sourceFilename}
-                    onChange={(event) => setSourceFilename(event.target.value)}
-                    isDisabled={running}
+              <>
+                <HStack align="end" spacing={3} flexWrap="wrap">
+                  <FormControl maxW="360px">
+                    <FormLabel>Source render</FormLabel>
+                    <Select
+                      value={sourceFilename}
+                      onChange={(event) =>
+                        setSourceFilename(event.target.value)
+                      }
+                      isDisabled={running}
+                    >
+                      {exports.renders.map((file) => (
+                        <option key={file.filename} value={file.filename}>
+                          {file.filename}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl maxW="280px">
+                    <FormLabel>Format</FormLabel>
+                    <Select
+                      value={preset}
+                      onChange={(event) => setPreset(event.target.value)}
+                      isDisabled={running}
+                    >
+                      {options.presets.map((item) => (
+                        <option key={item.key} value={item.key}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl maxW="240px">
+                    <FormLabel>Framing</FormLabel>
+                    <Select
+                      value={framing}
+                      onChange={(event) =>
+                        setFraming(event.target.value as "crop" | "fit")
+                      }
+                      isDisabled={running}
+                    >
+                      {options.framing_modes.map((item) => (
+                        <option key={item.key} value={item.key}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl maxW="240px" pb={2}>
+                    <Checkbox
+                      isChecked={useGpu}
+                      onChange={(event) => setUseGpu(event.target.checked)}
+                      isDisabled={running || !gpuStatus?.available}
+                    >
+                      Use GPU acceleration
+                    </Checkbox>
+                  </FormControl>
+                  <Button
+                    leftIcon={<FiShare2 />}
+                    colorScheme="blue"
+                    onClick={() => void handleSocialExport()}
+                    isDisabled={!sourceFilename || !preset || running}
+                    isLoading={running}
                   >
-                    {exports.renders.map((file) => (
-                      <option key={file.filename} value={file.filename}>
-                        {file.filename}
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl maxW="280px">
-                  <FormLabel>Format</FormLabel>
-                  <Select
-                    value={preset}
-                    onChange={(event) => setPreset(event.target.value)}
-                    isDisabled={running}
-                  >
-                    {options.presets.map((item) => (
-                      <option key={item.key} value={item.key}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl maxW="240px">
-                  <FormLabel>Framing</FormLabel>
-                  <Select
-                    value={framing}
-                    onChange={(event) =>
-                      setFraming(event.target.value as "crop" | "fit")
-                    }
-                    isDisabled={running}
-                  >
-                    {options.framing_modes.map((item) => (
-                      <option key={item.key} value={item.key}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Button
-                  leftIcon={<FiShare2 />}
-                  colorScheme="blue"
-                  onClick={() => void handleSocialExport()}
-                  isDisabled={!sourceFilename || !preset || running}
-                  isLoading={running}
-                >
-                  Create social export
-                </Button>
-              </HStack>
+                    Create social export
+                  </Button>
+                </HStack>
+                <Text fontSize="sm" color="gray.600">
+                  Uses supported H.264 hardware encoding to potentially speed up
+                  conversion. Output stays H.264/AAC for platform compatibility.
+                </Text>
+                {gpuStatus && !gpuStatus.available && (
+                  <Text fontSize="sm" color="orange.700">
+                    GPU encoding is not available on this machine
+                    {gpuStatus.reason ? `: ${gpuStatus.reason}` : "."}
+                  </Text>
+                )}
+                {gpuStatus?.available && gpuStatus.encoder && (
+                  <Text fontSize="sm" color="gray.600">
+                    Backend: {gpuStatus.encoder.name} ({gpuStatus.encoder.codec}
+                    )
+                  </Text>
+                )}
+              </>
             )}
             {job && (
               <Alert

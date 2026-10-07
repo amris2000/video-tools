@@ -171,6 +171,7 @@ class SocialExportRequest(BaseModel):
     source_filename: str
     preset: str
     framing: Literal["crop", "fit"]
+    gpu: bool = False
 
 
 class MediaJobResponse(BaseModel):

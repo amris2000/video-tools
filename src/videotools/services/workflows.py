@@ -74,12 +74,19 @@ def gpu_render_status() -> dict[str, object]:
     return gpu_acceleration_status()
 
 
+def gpu_social_status() -> dict[str, object]:
+    """Report GPU encoding availability for social exports (H.264)."""
+
+    return gpu_acceleration_status(codec="h264")
+
+
 def start_social_export(
     project: VideoProject,
     project_id: str,
     source_filename: str,
     preset_key: str,
     framing: str,
+    gpu: bool = False,
 ) -> MediaJob:
     source = resolve_export_video(project, source_filename)
     preset = next((item for item in SOCIAL_PRESETS if item.key == preset_key), None)
@@ -98,6 +105,7 @@ def start_social_export(
             output=output,
             preset=preset,
             framing=cast(FramingMode, selected_framing),
+            gpu=gpu,
         ),
     )
 

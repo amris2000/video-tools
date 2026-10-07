@@ -6,6 +6,13 @@ import shutil
 import subprocess
 from typing import Literal
 
+from videotools.gpu_encoders import (
+	GpuEncoder,
+	GpuUnavailableError,
+	apply_h264_encoder_options,
+	is_gpu_initialization_error,
+	select_gpu_encoder,
+)
 from videotools.project import VideoProject
 from videotools.render import RenderError, probe_stream_signature
 
@@ -105,6 +112,7 @@ def build_social_command(
 	preset: SocialPreset,
 	framing: FramingMode,
 	include_audio: bool,
+	encoder: GpuEncoder | None = None,
 ) -> list[str]:
 	command = [
 		ffmpeg,
@@ -117,15 +125,22 @@ def build_social_command(
 		"0:v:0",
 		"-vf",
 		build_social_filter(preset, framing),
-		"-c:v",
-		preset.video_codec,
-		"-crf",
-		str(preset.crf),
-		"-preset",
-		preset.encoding_preset,
-		"-pix_fmt",
-		preset.pixel_format,
 	]
+
+	apply_h264_encoder_options(
+		command,
+		encoder,
+		cpu_codec=preset.video_codec,
+		cpu_crf=preset.crf,
+		cpu_preset=preset.encoding_preset,
+	)
+
+	command.extend(
+		(
+			"-pix_fmt",
+			preset.pixel_format,
+		)
+	)
 
 	if include_audio:
 		command.extend(
@@ -161,7 +176,16 @@ def convert_social_video(
 	output: Path,
 	preset: SocialPreset,
 	framing: FramingMode,
+	gpu: bool = False,
 ) -> Path:
+	"""Convert a render to a social preset without modifying the source.
+
+	With ``gpu=False`` (the default) the command is identical to previous
+	behavior. With ``gpu=True`` a verified hardware H.264 encoder is used
+	when available, and a GPU initialization failure retries once with the
+	software encoder.
+	"""
+
 	ffmpeg = shutil.which("ffmpeg")
 	if not ffmpeg:
 		raise SocialExportError("ffmpeg was not found on PATH.")
@@ -175,15 +199,59 @@ def convert_social_video(
 	except RenderError as error:
 		raise SocialExportError(str(error)) from error
 
+	encoder = _resolve_social_encoder(gpu)
+	include_audio = signature.audio is not None
+
 	command = build_social_command(
 		ffmpeg=ffmpeg,
 		source=source,
 		output=output,
 		preset=preset,
 		framing=framing,
-		include_audio=signature.audio is not None,
+		include_audio=include_audio,
+		encoder=encoder,
 	)
 
+	try:
+		_run_social_command(command)
+	except SocialExportError as error:
+		if (
+			encoder is not None
+			and encoder.is_hardware
+			and is_gpu_initialization_error(error)
+		):
+			# GPU init failed even though the encoder probed OK earlier; retry
+			# once with the software encoder. Input/filter errors are not
+			# retried.
+			cpu_command = build_social_command(
+				ffmpeg=ffmpeg,
+				source=source,
+				output=output,
+				preset=preset,
+				framing=framing,
+				include_audio=include_audio,
+				encoder=None,
+			)
+			_run_social_command(cpu_command)
+		else:
+			raise
+
+	return output
+
+
+def _resolve_social_encoder(gpu: bool) -> GpuEncoder | None:
+	if not gpu:
+		return None
+	try:
+		return select_gpu_encoder("h264")
+	except GpuUnavailableError as error:
+		raise SocialExportError(
+		"GPU acceleration was requested, but no compatible hardware encoder "
+		f"is available: {error} Convert with GPU acceleration disabled."
+	) from error
+
+
+def _run_social_command(command: list[str]) -> None:
 	try:
 		result = subprocess.run(
 			command,
@@ -196,5 +264,3 @@ def convert_social_video(
 	if result.returncode != 0:
 		detail = result.stderr.strip() or "ffmpeg returned an unknown error."
 		raise SocialExportError(f"Social conversion failed:\n{detail}")
-
-	return output

@@ -34,6 +34,7 @@ from videotools.services.media import (
 )
 from videotools.services.workflows import (
     gpu_render_status,
+    gpu_social_status,
     list_exports,
     social_options,
     start_organize_job,
@@ -300,10 +301,17 @@ def post_social_export(
             request.source_filename,
             request.preset,
             request.framing,
+            gpu=request.gpu,
         )
     except Exception as error:
         _raise_service_error(error)
     return _job_response(job)
+
+
+@router.get("/{project_id}/social-gpu", response_model=GpuStatusResponse)
+def get_social_gpu_status(project_id: str) -> GpuStatusResponse:
+    _project(project_id)
+    return GpuStatusResponse.model_validate(gpu_social_status())
 
 
 @router.post("/{project_id}/organize", response_model=MediaJobResponse, status_code=202)

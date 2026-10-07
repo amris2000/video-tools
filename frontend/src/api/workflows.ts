@@ -280,11 +280,21 @@ export function startSocialExport(
   sourceFilename: string,
   preset: string,
   framing: "crop" | "fit",
+  gpu = false,
 ) {
   return api<MediaJob>(`${projectPath(projectId)}/social-exports`, {
     method: "POST",
-    body: JSON.stringify({ source_filename: sourceFilename, preset, framing }),
+    body: JSON.stringify({
+      source_filename: sourceFilename,
+      preset,
+      framing,
+      gpu,
+    }),
   });
+}
+
+export function getSocialGpuStatus(projectId: string, signal?: AbortSignal) {
+  return api<GpuStatus>(`${projectPath(projectId)}/social-gpu`, { signal });
 }
 
 export function startProbe(projectId: string, force = false) {
