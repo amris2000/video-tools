@@ -9,6 +9,15 @@ import tempfile
 from typing import Any
 
 from videotools.edit import EditTimeline, EditValidationError
+from videotools.gpu_encoders import (
+    GpuEncodingError,
+    GpuUnavailableError,
+    GpuEncoder,
+    apply_video_encoder_options,
+    describe_video_encoder,
+    is_gpu_initialization_error,
+    select_gpu_encoder,
+)
 
 
 class RenderError(RuntimeError):
@@ -65,6 +74,12 @@ def render_fast(
 ) -> Path:
     """Render a timeline using a single FFmpeg stream-copy pass."""
 
+    if any(clip.speed != 1.0 for clip in timeline.clips):
+        raise RenderError(
+            "Fast rendering copies streams without re-encoding and cannot "
+            "change clip speed; use accurate mode for this timeline."
+        )
+
     ffmpeg, signatures = _prepare_render(timeline, overwrite)
     _validate_stream_compatibility(signatures)
 
@@ -91,12 +106,21 @@ def render_accurate(
     timeline: EditTimeline,
     *,
     overwrite: bool = False,
+    gpu: bool = False,
 ) -> Path:
-    """Render exact requested cuts with one HEVC encoding pass."""
+    """Render exact requested cuts with one HEVC encoding pass.
+
+    With ``gpu=False`` (the default) the command is identical to previous
+    behavior. With ``gpu=True`` a verified hardware encoder is used when
+    available, and a GPU initialization failure retries once with the CPU
+    encoder.
+    """
 
     ffmpeg, signatures = _prepare_render(timeline, overwrite)
     has_audio, pixel_format = _validate_accurate_compatibility(signatures)
     target_frame_rate = _accurate_target_frame_rate(timeline, signatures)
+
+    encoder = _resolve_encoder(gpu)
 
     command = build_accurate_command(
         ffmpeg=ffmpeg,
@@ -105,9 +129,33 @@ def render_accurate(
         pixel_format=pixel_format,
         target_frame_rate=target_frame_rate,
         overwrite=overwrite,
+        encoder=encoder,
     )
 
-    _run_ffmpeg(command, timeline.output)
+    try:
+        _run_ffmpeg(command, timeline.output)
+    except RenderError as error:
+        if (
+            encoder is not None
+            and encoder.is_hardware
+            and is_gpu_initialization_error(error)
+        ):
+            # GPU init failed even though the encoder probed OK earlier; retry
+            # once with the software encoder. Input/filter errors are not
+            # retried.
+            cpu_command = build_accurate_command(
+                ffmpeg=ffmpeg,
+                timeline=timeline,
+                has_audio=has_audio,
+                pixel_format=pixel_format,
+                target_frame_rate=target_frame_rate,
+                overwrite=overwrite,
+                encoder=None,
+            )
+            _run_ffmpeg(cpu_command, timeline.output)
+        else:
+            raise
+
     return timeline.output
 
 
@@ -149,6 +197,7 @@ def build_accurate_command(
     pixel_format: str | None,
     target_frame_rate: str | None,
     overwrite: bool,
+    encoder: GpuEncoder | None = None,
 ) -> list[str]:
     command = [
         ffmpeg,
@@ -173,7 +222,7 @@ def build_accurate_command(
         (
             "-filter_complex",
             build_accurate_filter(
-                len(timeline.clips),
+                [clip.speed for clip in timeline.clips],
                 has_audio,
                 target_frame_rate=target_frame_rate,
             ),
@@ -193,16 +242,12 @@ def build_accurate_command(
             "-1",
             "-sn",
             "-dn",
-            "-c:v",
-            "libx265",
-            "-preset",
-            "medium",
-            "-crf",
-            "20",
-            "-tag:v",
-            "hvc1",
         )
     )
+
+    apply_video_encoder_options(command, encoder)
+
+    command.extend(("-tag:v", "hvc1"))
 
     if pixel_format:
         command.extend(("-pix_fmt", pixel_format))
@@ -221,7 +266,7 @@ def build_accurate_command(
 
 
 def build_accurate_filter(
-    clip_count: int,
+    speeds: list[float],
     has_audio: bool,
     *,
     target_frame_rate: str | None = None,
@@ -229,22 +274,29 @@ def build_accurate_filter(
     filters = []
     concat_inputs = []
 
-    for index in range(clip_count):
+    for index, speed in enumerate(speeds):
         video_filters = []
         if target_frame_rate:
             video_filters.append(f"fps={target_frame_rate}")
-        video_filters.append("setpts=PTS-STARTPTS")
+        if speed != 1.0:
+            video_filters.append(f"setpts=(PTS-STARTPTS)/{speed:g}")
+        else:
+            video_filters.append("setpts=PTS-STARTPTS")
         filters.append(
             f"[{index}:v:0]" + ",".join(video_filters) + f"[v{index}]"
         )
         concat_inputs.append(f"[v{index}]")
 
         if has_audio:
+            audio_filters = ["asetpts=PTS-STARTPTS"]
+            if speed != 1.0:
+                audio_filters.extend(_atempo_chain(speed))
             filters.append(
-                f"[{index}:a:0]asetpts=PTS-STARTPTS[a{index}]"
+                f"[{index}:a:0]" + ",".join(audio_filters) + f"[a{index}]"
             )
             concat_inputs.append(f"[a{index}]")
 
+    clip_count = len(speeds)
     outputs = "[vout][aout]" if has_audio else "[vout]"
     filters.append(
         "".join(concat_inputs)
@@ -253,6 +305,25 @@ def build_accurate_filter(
     )
 
     return ";".join(filters)
+
+
+def _atempo_chain(speed: float) -> list[str]:
+    """Build an atempo filter chain for an arbitrary positive speed.
+
+    A single atempo filter only accepts factors between 0.5 and 100, so
+    extreme speeds are chained across multiple instances.
+    """
+
+    filters = []
+    remaining = speed
+    while remaining > 100.0:
+        filters.append("atempo=100.0")
+        remaining /= 100.0
+    while remaining < 0.5:
+        filters.append("atempo=0.5")
+        remaining /= 0.5
+    filters.append(f"atempo={remaining:g}")
+    return filters
 
 
 def build_concat_text(timeline: EditTimeline) -> str:
@@ -497,6 +568,19 @@ def _parse_duration(value: Any) -> float | None:
         return None
 
     return duration if duration >= 0 else None
+
+
+def _resolve_encoder(gpu: bool) -> GpuEncoder | None:
+    if not gpu:
+        return None
+
+    try:
+        return select_gpu_encoder()
+    except GpuUnavailableError as error:
+        raise RenderError(
+            f"GPU rendering was requested, but no compatible hardware encoder "
+            f"is available: {error} Render with GPU acceleration disabled."
+        ) from error
 
 
 def _find_executable(name: str) -> str:

@@ -149,8 +149,8 @@ exports_social = "exports-social"
         started = Event()
         release = Event()
 
-        def fake_render(timeline, *, overwrite):
-            del overwrite
+        def fake_render(timeline, *, overwrite, gpu=False):
+            del overwrite, gpu
             started.set()
             release.wait(timeout=3)
             return timeline.output
@@ -186,6 +186,70 @@ exports_social = "exports-social"
 
         self.assertEqual(completed["status"], "completed")
         self.assertEqual(completed["output_filename"].endswith("_accurate.mp4"), True)
+
+    def test_render_api_defaults_gpu_to_false_and_propagates_true(self):
+        self.client.post(
+            "/api/projects/workflow-project/edits",
+            json={"filename": "gpu_edit.json", "output": "gpu.mp4"},
+        )
+        self.client.put(
+            "/api/projects/workflow-project/edits/gpu_edit.json",
+            json={
+                "document": {
+                    "version": 1,
+                    "output": "gpu.mp4",
+                    "clips": [{"file": "day-one/same.mp4", "start": 5, "end": 10}],
+                }
+            },
+        )
+        seen_gpu: list[bool] = []
+
+        def fake_render(timeline, *, overwrite, gpu=False):
+            del overwrite
+            seen_gpu.append(gpu)
+            return timeline.output
+
+        with patch("videotools.services.workflows.render_accurate", side_effect=fake_render):
+            default = self.client.post(
+                "/api/projects/workflow-project/renders",
+                json={"edit_filename": "gpu_edit.json", "mode": "accurate"},
+            )
+            self.assertEqual(default.status_code, 202, default.text)
+            self._wait_for_completion(default.json()["job_id"])
+
+            enabled = self.client.post(
+                "/api/projects/workflow-project/renders",
+                json={"edit_filename": "gpu_edit.json", "mode": "accurate", "gpu": True},
+            )
+            self.assertEqual(enabled.status_code, 202, enabled.text)
+            self._wait_for_completion(enabled.json()["job_id"])
+
+        self.assertEqual(seen_gpu, [False, True])
+
+    def test_render_gpu_status_endpoint_reports_availability(self):
+        with patch(
+            "videotools.web.routers.workflows.gpu_render_status",
+            return_value={
+                "available": True,
+                "encoder": {"key": "nvidia", "name": "NVIDIA NVENC", "codec": "hevc_nvenc"},
+                "reason": None,
+            },
+        ):
+            response = self.client.get("/api/projects/workflow-project/render-gpu")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["available"])
+        self.assertEqual(body["encoder"]["codec"], "hevc_nvenc")
+
+    def _wait_for_completion(self, job_id: str) -> dict:
+        for _ in range(100):
+            response = self.client.get(f"/api/projects/workflow-project/jobs/{job_id}")
+            body = response.json()
+            if body["status"] in {"completed", "failed"}:
+                return body
+            Event().wait(0.01)
+        self.fail(f"Job {job_id} did not finish in time")
 
     def test_social_export_api_completes_and_lists_the_output(self):
         converted = []

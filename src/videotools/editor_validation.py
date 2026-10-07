@@ -4,14 +4,13 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
-from videotools.edit import EditValidationError
+from videotools.edit import EditValidationError, validate_clip_speed
 from videotools.media import VIDEO_EXTENSIONS
 from videotools.project import VideoProject
 
 _ROOT_FIELDS = {"version", "output", "clips"}
-_CLIP_FIELDS = {"file", "start", "end", "label"}
+_CLIP_FIELDS = {"file", "start", "end", "label", "speed"}
 _FUTURE_CLIP_FIELDS = {
-    "speed",
     "volume",
     "fade_in",
     "fade_out",
@@ -108,6 +107,10 @@ def _validate_clip(
     }
     if label is not None:
         result["label"] = label
+
+    speed = validate_clip_speed(raw.get("speed"), location)
+    if speed != 1.0:
+        result["speed"] = round(speed, 3)
 
     return result
 

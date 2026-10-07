@@ -67,7 +67,10 @@ type TimelineOccurrence = {
   start: number;
   end: number;
   label?: string;
+  speed: number;
 };
+
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
 
 function serializeEdit(
   output: string,
@@ -76,17 +79,24 @@ function serializeEdit(
   return {
     version: 1,
     output,
-    clips: occurrences.map(({ file, start, end, label }) => ({
+    // speed is omitted when 1 so documents without speed changes stay
+    // readable by older tooling that only knows version-1 fields.
+    clips: occurrences.map(({ file, start, end, label, speed }) => ({
       file,
       start,
       end,
       ...(label?.trim() ? { label: label.trim() } : {}),
+      ...(speed !== 1 ? { speed } : {}),
     })),
   };
 }
 
 function makeOccurrences(document: EditDocument): TimelineOccurrence[] {
-  return document.clips.map((clip) => ({ ...clip, id: crypto.randomUUID() }));
+  return document.clips.map((clip) => ({
+    ...clip,
+    id: crypto.randomUUID(),
+    speed: clip.speed ?? 1,
+  }));
 }
 
 function clipsPathPrefix(value: string | undefined) {
@@ -134,6 +144,8 @@ export function EditorPage() {
   const [error, setError] = useState("");
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stopAtEndRef = useRef(false);
+  const lastSeekOccurrenceRef = useRef<string | null>(null);
   const {
     isOpen: isClipPickerOpen,
     onOpen: openClipPicker,
@@ -147,11 +159,17 @@ export function EditorPage() {
   const quickPreviewVideoRef = useRef<HTMLVideoElement>(null);
   const [quickPreviewIndex, setQuickPreviewIndex] = useState(0);
   const [quickPreviewError, setQuickPreviewError] = useState("");
+  const [timeDraft, setTimeDraft] = useState<{ start: string; end: string }>({
+    start: "",
+    end: "",
+  });
+  const [timeError, setTimeError] = useState("");
 
   const selectedOccurrence =
     occurrences.find((item) => item.id === selectedId) ?? null;
   const selectedFile = selectedOccurrence?.file ?? null;
   const selectedStart = selectedOccurrence?.start ?? 0;
+  const selectedSpeed = selectedOccurrence?.speed ?? 1;
   const loading = loadedProjectId !== activeProjectId;
   const documentValue = serializeEdit(output, occurrences);
   const snapshot = JSON.stringify(documentValue);
@@ -164,7 +182,7 @@ export function EditorPage() {
     : null;
   const quickPreviewOccurrence = occurrences[quickPreviewIndex] ?? null;
   const totalTimelineSeconds = occurrences.reduce(
-    (total, item) => total + Math.max(0, item.end - item.start),
+    (total, item) => total + Math.max(0, item.end - item.start) / item.speed,
     0,
   );
   const quickPreviewVideoUrl =
@@ -226,16 +244,21 @@ export function EditorPage() {
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !selectedId || !selectedFile) {
+      if (video) video.playbackRate = 1;
       video?.pause();
       video?.removeAttribute("src");
       video?.load();
       return;
     }
 
+    video.playbackRate = selectedSpeed;
+
     const seekToOccurrence = () => {
-      if (video.dataset.currentOccurrence === selectedId) {
-        video.currentTime = selectedStart;
-      }
+      if (video.dataset.currentOccurrence !== selectedId) return;
+      // Don't yank the playhead mid-playback when only the trim start moved.
+      if (!video.paused && lastSeekOccurrenceRef.current === selectedId) return;
+      video.currentTime = selectedStart;
+      lastSeekOccurrenceRef.current = selectedId;
     };
     video.dataset.currentOccurrence = selectedId;
 
@@ -259,7 +282,27 @@ export function EditorPage() {
       return () =>
         video.removeEventListener("loadedmetadata", seekToOccurrence);
     }
-  }, [activeProjectId, selectedId, selectedFile, selectedStart]);
+  }, [activeProjectId, selectedId, selectedFile, selectedStart, selectedSpeed]);
+
+  useEffect(() => {
+    stopAtEndRef.current = false;
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedOccurrence) {
+      setTimeDraft({ start: "", end: "" });
+    } else {
+      setTimeDraft({
+        start: String(selectedOccurrence.start),
+        end: String(selectedOccurrence.end),
+      });
+    }
+    setTimeError("");
+  }, [
+    selectedOccurrence?.id,
+    selectedOccurrence?.start,
+    selectedOccurrence?.end,
+  ]);
 
   async function reloadEdits(selectedFilename?: string) {
     const editList = await getEdits(activeProjectId);
@@ -425,6 +468,7 @@ export function EditorPage() {
           start: 0,
           end,
           label: `Sample from ${source.name}`,
+          speed: 1,
         },
       ];
     });
@@ -498,9 +542,43 @@ export function EditorPage() {
     updateOccurrence(selectedOccurrence.id, { [field]: number });
   }
 
+  function commitTimeDraft() {
+    if (!selectedOccurrence) return;
+    const start = Number(timeDraft.start);
+    const end = Number(timeDraft.end);
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      setTimeError("Start and end must be numbers.");
+      return;
+    }
+    if (start < 0) {
+      setTimeError("Start must be zero or greater.");
+      return;
+    }
+    if (end <= start) {
+      setTimeError("End must be greater than start.");
+      return;
+    }
+    if (sourceDuration !== null && end > sourceDuration) {
+      setTimeError(
+        `End cannot exceed the source duration (${seconds(sourceDuration)}).`,
+      );
+      return;
+    }
+
+    setTimeError("");
+    updateOccurrence(selectedOccurrence.id, { start, end });
+  }
+
+  const timeDraftDirty =
+    selectedOccurrence !== null &&
+    (timeDraft.start !== String(selectedOccurrence.start) ||
+      timeDraft.end !== String(selectedOccurrence.end));
+
   function playSelection() {
     const video = videoRef.current;
     if (!video || !selectedOccurrence) return;
+    stopAtEndRef.current = true;
     video.currentTime = selectedOccurrence.start;
     void video.play();
   }
@@ -678,11 +756,14 @@ export function EditorPage() {
                   preload="metadata"
                   style={{ width: "100%", maxHeight: 420 }}
                   onTimeUpdate={(event) => {
+                    if (!stopAtEndRef.current) return;
                     if (
                       selectedOccurrence &&
                       event.currentTarget.currentTime >= selectedOccurrence.end
-                    )
+                    ) {
+                      stopAtEndRef.current = false;
                       event.currentTarget.pause();
+                    }
                   }}
                 />
               </Box>
@@ -694,7 +775,13 @@ export function EditorPage() {
                   Play selection
                 </Button>
                 <Text color="gray.600">
-                  {seconds(selectedOccurrence.end - selectedOccurrence.start)}
+                  {seconds(
+                    (selectedOccurrence.end - selectedOccurrence.start) /
+                      selectedOccurrence.speed,
+                  )}
+                  {selectedOccurrence.speed !== 1
+                    ? ` (source ${seconds(selectedOccurrence.end - selectedOccurrence.start)})`
+                    : ""}
                 </Text>
               </HStack>
               {sourceDuration !== null && sourceDuration > 0 && (
@@ -735,32 +822,55 @@ export function EditorPage() {
                 </Box>
               )}
               <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
-                <FormControl>
+                <FormControl isInvalid={Boolean(timeError)}>
                   <FormLabel>Start (seconds)</FormLabel>
                   <Input
                     type="number"
                     min={0}
                     max={sourceDuration ?? undefined}
                     step={0.001}
-                    value={selectedOccurrence.start}
-                    onChange={(event) =>
-                      updateTime("start", event.target.value)
-                    }
+                    value={timeDraft.start}
+                    onChange={(event) => {
+                      setTimeError("");
+                      setTimeDraft((current) => ({
+                        ...current,
+                        start: event.target.value,
+                      }));
+                    }}
                   />
                 </FormControl>
-                <FormControl>
+                <FormControl isInvalid={Boolean(timeError)}>
                   <FormLabel>End (seconds)</FormLabel>
                   <Input
                     type="number"
                     min={0.001}
                     max={sourceDuration ?? undefined}
                     step={0.001}
-                    value={selectedOccurrence.end}
-                    onChange={(event) => updateTime("end", event.target.value)}
+                    value={timeDraft.end}
+                    onChange={(event) => {
+                      setTimeError("");
+                      setTimeDraft((current) => ({
+                        ...current,
+                        end: event.target.value,
+                      }));
+                    }}
                   />
                 </FormControl>
               </SimpleGrid>
+              {timeError && (
+                <Text color="red.600" fontSize="sm">
+                  {timeError}
+                </Text>
+              )}
               <HStack>
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  onClick={commitTimeDraft}
+                  isDisabled={!timeDraftDirty}
+                >
+                  Update times
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -791,6 +901,35 @@ export function EditorPage() {
                   Set end to playhead
                 </Button>
               </HStack>
+              <FormControl>
+                <FormLabel>Speed</FormLabel>
+                <Select
+                  value={String(selectedOccurrence.speed)}
+                  onChange={(event) =>
+                    updateOccurrence(selectedOccurrence.id, {
+                      speed: Number(event.target.value),
+                    })
+                  }
+                  maxW="200px"
+                >
+                  {SPEED_OPTIONS.map((option) => (
+                    <option key={option} value={String(option)}>
+                      {option}×{option === 1 ? " (normal)" : ""}
+                    </option>
+                  ))}
+                </Select>
+                {selectedOccurrence.speed !== 1 && (
+                  <Text fontSize="xs" color="gray.600" mt={1}>
+                    Plays as{" "}
+                    {formatDuration(
+                      (selectedOccurrence.end - selectedOccurrence.start) /
+                        selectedOccurrence.speed,
+                    )}{" "}
+                    in the rendered video. Render in accurate mode; fast mode
+                    copies streams and cannot change speed.
+                  </Text>
+                )}
+              </FormControl>
               <FormControl>
                 <FormLabel>Label</FormLabel>
                 <Input
@@ -887,6 +1026,7 @@ export function EditorPage() {
                               whiteSpace="nowrap"
                             >
                               {seconds(item.start)} → {seconds(item.end)}
+                              {item.speed !== 1 ? ` · ×${item.speed}` : ""}
                             </Text>
                           </HStack>
                         </HStack>
@@ -984,6 +1124,8 @@ export function EditorPage() {
                       style={{ width: "100%", maxHeight: 560 }}
                       onLoadStart={() => setQuickPreviewError("")}
                       onLoadedMetadata={(event) => {
+                        event.currentTarget.playbackRate =
+                          quickPreviewOccurrence.speed;
                         event.currentTarget.currentTime =
                           quickPreviewOccurrence.start;
                         void event.currentTarget.play().catch(() => {
@@ -1017,6 +1159,9 @@ export function EditorPage() {
                   <Text color="gray.600">
                     {seconds(quickPreviewOccurrence.start)} to{" "}
                     {seconds(quickPreviewOccurrence.end)}
+                    {quickPreviewOccurrence.speed !== 1
+                      ? ` · ×${quickPreviewOccurrence.speed}`
+                      : ""}
                   </Text>
                 </>
               )}

@@ -3,6 +3,7 @@ import {
   AlertIcon,
   Box,
   Button,
+  Checkbox,
   FormControl,
   FormLabel,
   Heading,
@@ -19,8 +20,10 @@ import {
   getEdits,
   getExportUrl,
   getMediaJob,
+  getRenderGpuStatus,
   startRender,
   type EditSummary,
+  type GpuStatus,
   type MediaJob,
 } from "../api/workflows";
 
@@ -30,6 +33,8 @@ export function RenderPage() {
   const [edits, setEdits] = useState<EditSummary[]>([]);
   const [editFilename, setEditFilename] = useState("");
   const [mode, setMode] = useState<"accurate" | "fast">("accurate");
+  const [useGpu, setUseGpu] = useState(false);
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
   const [job, setJob] = useState<MediaJob | null>(null);
   const [jobStartedAt, setJobStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -65,6 +70,23 @@ export function RenderPage() {
       })
       .finally(() => {
         if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    getRenderGpuStatus(activeProjectId, controller.signal)
+      .then((status) => {
+        if (active) setGpuStatus(status);
+      })
+      .catch(() => {
+        if (active)
+          setGpuStatus({ available: false, encoder: null, reason: null });
       });
     return () => {
       active = false;
@@ -122,7 +144,7 @@ export function RenderPage() {
     setJobStartedAt(startedAt);
     setElapsedSeconds(0);
     try {
-      setJob(await startRender(activeProjectId, editFilename, mode));
+      setJob(await startRender(activeProjectId, editFilename, mode, useGpu));
     } catch (reason) {
       setJobStartedAt(null);
       setError(
@@ -200,6 +222,38 @@ export function RenderPage() {
                 Fast: stream copy, keyframe-limited cuts
               </option>
             </Select>
+          </FormControl>
+          <FormControl maxW="520px">
+            <Checkbox
+              isChecked={useGpu && mode === "accurate"}
+              onChange={(event) => setUseGpu(event.target.checked)}
+              isDisabled={
+                running || mode !== "accurate" || !gpuStatus?.available
+              }
+            >
+              Use GPU acceleration
+            </Checkbox>
+            <Text fontSize="sm" color="gray.600" mt={1}>
+              Uses supported hardware encoding to potentially speed up
+              rendering. Performance and output size may vary.
+            </Text>
+            {gpuStatus && !gpuStatus.available && (
+              <Text fontSize="sm" color="orange.700" mt={1}>
+                GPU encoding is not available on this machine
+                {gpuStatus.reason ? `: ${gpuStatus.reason}` : "."}
+              </Text>
+            )}
+            {gpuStatus?.available && gpuStatus.encoder && (
+              <Text fontSize="sm" color="gray.600" mt={1}>
+                Backend: {gpuStatus.encoder.name} ({gpuStatus.encoder.codec})
+              </Text>
+            )}
+            {mode === "fast" && (
+              <Text fontSize="sm" color="gray.600" mt={1}>
+                GPU acceleration is only used in accurate mode; fast mode
+                copies streams without re-encoding.
+              </Text>
+            )}
           </FormControl>
           <Button
             colorScheme="blue"

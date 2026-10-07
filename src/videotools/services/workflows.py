@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from videotools.edit import load_edit_timeline
 from videotools.edit_files import create_render_output_path, list_render_files, list_social_render_files
+from videotools.gpu_encoders import gpu_acceleration_status
 from videotools.metadata import analyze_project
 from videotools.project import VideoProject
 from videotools.render import render_accurate, render_fast
@@ -53,12 +54,24 @@ def start_render(
     project_id: str,
     edit_filename: str,
     mode: str,
+    gpu: bool = False,
 ) -> MediaJob:
     timeline = load_edit_timeline(edit_path(project, edit_filename), project)
     output = create_render_output_path(project, mode)
     render_timeline = replace(timeline, output=output)
-    renderer = render_fast if mode == "fast" else render_accurate
-    return start_job(project_id, "render", lambda: renderer(render_timeline, overwrite=False))
+
+    def run() -> Path:
+        if mode == "fast":
+            return render_fast(render_timeline, overwrite=False)
+        return render_accurate(render_timeline, overwrite=False, gpu=gpu)
+
+    return start_job(project_id, "render", run)
+
+
+def gpu_render_status() -> dict[str, object]:
+    """Report GPU encoding availability for the render page."""
+
+    return gpu_acceleration_status()
 
 
 def start_social_export(

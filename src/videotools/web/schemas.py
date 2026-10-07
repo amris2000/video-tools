@@ -115,6 +115,7 @@ class EditClipDocument(BaseModel):
     start: StrictInt | StrictFloat
     end: StrictInt | StrictFloat
     label: str | None = None
+    speed: StrictInt | StrictFloat | None = None
 
 
 class EditDocument(BaseModel):
@@ -151,6 +152,19 @@ class EditResponse(BaseModel):
 class RenderRequest(BaseModel):
     edit_filename: str
     mode: Literal["accurate", "fast"]
+    gpu: bool = False
+
+
+class GpuEncoderInfo(BaseModel):
+    key: str
+    name: str
+    codec: str
+
+
+class GpuStatusResponse(BaseModel):
+    available: bool
+    encoder: GpuEncoderInfo | None
+    reason: str | None
 
 
 class SocialExportRequest(BaseModel):

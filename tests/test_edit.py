@@ -159,9 +159,54 @@ journal = "journal.json"
 
     def test_rejects_future_property_with_explicit_message(self):
         value = self.valid_edit()
-        value["clips"][0]["speed"] = 2.0
+        value["clips"][0]["volume"] = 0.5
 
         with self.assertRaisesRegex(EditValidationError, "not supported in version 1"):
+            load_edit_timeline(self.write_edit(value), self.project)
+
+    def test_speed_defaults_to_one_when_absent(self):
+        timeline = load_edit_timeline(
+            self.write_edit(self.valid_edit()),
+            self.project,
+        )
+
+        self.assertEqual(timeline.clips[0].speed, 1.0)
+        self.assertEqual(
+            timeline.clips[0].playback_duration,
+            timeline.clips[0].duration,
+        )
+
+    def test_accepts_clip_speed(self):
+        value = self.valid_edit()
+        value["clips"][0]["speed"] = 2.0
+
+        timeline = load_edit_timeline(self.write_edit(value), self.project)
+
+        self.assertEqual(timeline.clips[0].speed, 2.0)
+        self.assertEqual(
+            timeline.clips[0].playback_duration,
+            timeline.clips[0].duration / 2.0,
+        )
+
+    def test_rejects_zero_speed(self):
+        value = self.valid_edit()
+        value["clips"][0]["speed"] = 0
+
+        with self.assertRaisesRegex(EditValidationError, "speed must be greater than zero"):
+            load_edit_timeline(self.write_edit(value), self.project)
+
+    def test_rejects_out_of_range_speed(self):
+        value = self.valid_edit()
+        value["clips"][0]["speed"] = 25.0
+
+        with self.assertRaisesRegex(EditValidationError, "speed must be between"):
+            load_edit_timeline(self.write_edit(value), self.project)
+
+    def test_rejects_non_numeric_speed(self):
+        value = self.valid_edit()
+        value["clips"][0]["speed"] = "fast"
+
+        with self.assertRaisesRegex(EditValidationError, "speed must be a number"):
             load_edit_timeline(self.write_edit(value), self.project)
 
     def test_loads_edit_file_from_project_edits_directory(self):

@@ -5,6 +5,8 @@ export interface EditClipDocument {
   start: number;
   end: number;
   label?: string;
+  /** Optional playback speed factor; absent means 1 (normal speed). */
+  speed?: number;
 }
 
 export interface EditDocument {
@@ -255,11 +257,22 @@ export function startRender(
   projectId: string,
   editFilename: string,
   mode: "accurate" | "fast",
+  gpu = false,
 ) {
   return api<MediaJob>(`${projectPath(projectId)}/renders`, {
     method: "POST",
-    body: JSON.stringify({ edit_filename: editFilename, mode }),
+    body: JSON.stringify({ edit_filename: editFilename, mode, gpu }),
   });
+}
+
+export interface GpuStatus {
+  available: boolean;
+  encoder: { key: string; name: string; codec: string } | null;
+  reason: string | null;
+}
+
+export function getRenderGpuStatus(projectId: string, signal?: AbortSignal) {
+  return api<GpuStatus>(`${projectPath(projectId)}/render-gpu`, { signal });
 }
 
 export function startSocialExport(

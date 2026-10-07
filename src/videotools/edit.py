@@ -14,16 +14,27 @@ class EditValidationError(ValueError):
     """Raised when an edit JSON file is invalid."""
 
 
+MIN_CLIP_SPEED = 0.1
+MAX_CLIP_SPEED = 10.0
+
+
 @dataclass(frozen=True)
 class EditClip:
     file: Path
     start: float
     end: float
     label: str | None = None
+    speed: float = 1.0
 
     @property
     def duration(self) -> float:
+        """Source-time length of the trimmed segment."""
         return self.end - self.start
+
+    @property
+    def playback_duration(self) -> float:
+        """Output-time length after applying the speed factor."""
+        return self.duration / self.speed
 
 
 @dataclass(frozen=True)
@@ -34,9 +45,8 @@ class EditTimeline:
 
 
 _ROOT_FIELDS = {"version", "output", "clips"}
-_CLIP_FIELDS = {"file", "start", "end", "label"}
+_CLIP_FIELDS = {"file", "start", "end", "label", "speed"}
 _FUTURE_CLIP_FIELDS = {
-    "speed",
     "volume",
     "fade_in",
     "fade_out",
@@ -141,12 +151,32 @@ def _parse_clip(
             f"{location}.label must be a non-empty string when provided."
         )
 
+    speed = validate_clip_speed(raw.get("speed"), location)
+
     return EditClip(
         file=source,
         start=start,
         end=end,
         label=label,
+        speed=speed,
     )
+
+
+def validate_clip_speed(value: Any, location: str) -> float:
+    """Validate an optional clip speed, defaulting to 1 when absent."""
+
+    if value is None:
+        return 1.0
+
+    speed = _number(value, f"{location}.speed")
+    if speed <= 0:
+        raise EditValidationError(f"{location}.speed must be greater than zero.")
+    if speed < MIN_CLIP_SPEED or speed > MAX_CLIP_SPEED:
+        raise EditValidationError(
+            f"{location}.speed must be between {MIN_CLIP_SPEED} and {MAX_CLIP_SPEED}."
+        )
+
+    return speed
 
 
 def _resolve_source(

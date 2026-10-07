@@ -33,6 +33,7 @@ from videotools.services.media import (
     stream_file,
 )
 from videotools.services.workflows import (
+    gpu_render_status,
     list_exports,
     social_options,
     start_organize_job,
@@ -50,6 +51,7 @@ from videotools.web.schemas import (
     EditSaveRequest,
     EditSummaryResponse,
     ExportsResponse,
+    GpuStatusResponse,
     JournalEntryCreateRequest,
     JournalEntryResponse,
     JournalEntryUpdateRequest,
@@ -102,7 +104,12 @@ def get_edits(project_id: str) -> list[dict]:
     return list_edits(_project(project_id))
 
 
-@router.post("/{project_id}/edits", response_model=EditResponse, status_code=201)
+@router.post(
+    "/{project_id}/edits",
+    response_model=EditResponse,
+    status_code=201,
+    response_model_exclude_none=True,
+)
 def post_edit(project_id: str, request: EditCreateRequest) -> dict:
     project = _project(project_id)
     try:
@@ -112,7 +119,11 @@ def post_edit(project_id: str, request: EditCreateRequest) -> dict:
     return {"filename": filename, "document": document}
 
 
-@router.get("/{project_id}/edits/{filename}", response_model=EditDocument)
+@router.get(
+    "/{project_id}/edits/{filename}",
+    response_model=EditDocument,
+    response_model_exclude_none=True,
+)
 def get_edit_document(project_id: str, filename: str) -> dict:
     try:
         return get_edit(_project(project_id), filename)
@@ -120,10 +131,18 @@ def get_edit_document(project_id: str, filename: str) -> dict:
         _raise_service_error(error)
 
 
-@router.put("/{project_id}/edits/{filename}", response_model=EditResponse)
+@router.put(
+    "/{project_id}/edits/{filename}",
+    response_model=EditResponse,
+    response_model_exclude_none=True,
+)
 def put_edit(project_id: str, filename: str, request: EditSaveRequest) -> dict:
     try:
-        document = save_edit(_project(project_id), filename, request.document.model_dump())
+        document = save_edit(
+            _project(project_id),
+            filename,
+            request.document.model_dump(exclude_none=True),
+        )
     except Exception as error:
         _raise_service_error(error)
     return {"filename": filename, "document": document}
@@ -251,10 +270,22 @@ def import_project_files(
 @router.post("/{project_id}/renders", response_model=MediaJobResponse, status_code=202)
 def post_render(project_id: str, request: RenderRequest) -> MediaJobResponse:
     try:
-        job = start_render(_project(project_id), project_id, request.edit_filename, request.mode)
+        job = start_render(
+            _project(project_id),
+            project_id,
+            request.edit_filename,
+            request.mode,
+            gpu=request.gpu,
+        )
     except Exception as error:
         _raise_service_error(error)
     return _job_response(job)
+
+
+@router.get("/{project_id}/render-gpu", response_model=GpuStatusResponse)
+def get_render_gpu_status(project_id: str) -> GpuStatusResponse:
+    _project(project_id)
+    return GpuStatusResponse.model_validate(gpu_render_status())
 
 
 @router.post("/{project_id}/social-exports", response_model=MediaJobResponse, status_code=202)
