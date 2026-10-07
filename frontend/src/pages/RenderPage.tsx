@@ -250,8 +250,8 @@ export function RenderPage() {
             )}
             {mode === "fast" && (
               <Text fontSize="sm" color="gray.600" mt={1}>
-                GPU acceleration is only used in accurate mode; fast mode
-                copies streams without re-encoding.
+                GPU acceleration is only used in accurate mode; fast mode copies
+                streams without re-encoding.
               </Text>
             )}
           </FormControl>
