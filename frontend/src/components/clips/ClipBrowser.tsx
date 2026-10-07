@@ -240,6 +240,38 @@ export function ClipBrowser(props: ClipBrowserProps) {
                 </Text>
                 <Button
                   size="sm"
+                  isDisabled={
+                    !visibleClips.length ||
+                    visibleSelected === visibleClips.length
+                  }
+                  onClick={() => {
+                    if (props.mode !== "select") return;
+                    const next = new Set(props.selectedClipPaths);
+                    for (const clip of visibleClips) next.add(clip.path);
+                    props.onSelectionChange([...next]);
+                  }}
+                >
+                  Select all
+                </Button>
+                <Button
+                  size="sm"
+                  isDisabled={!visibleSelected}
+                  onClick={() => {
+                    if (props.mode !== "select") return;
+                    const remove = new Set(
+                      visibleClips.map((clip) => clip.path),
+                    );
+                    props.onSelectionChange(
+                      props.selectedClipPaths.filter(
+                        (path) => !remove.has(path),
+                      ),
+                    );
+                  }}
+                >
+                  Deselect all
+                </Button>
+                <Button
+                  size="sm"
                   isDisabled={!totalSelected}
                   onClick={() => props.onSelectionChange([])}
                 >

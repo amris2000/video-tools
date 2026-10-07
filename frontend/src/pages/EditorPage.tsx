@@ -9,6 +9,7 @@ import {
   Heading,
   HStack,
   IconButton,
+  Image,
   Input,
   Modal,
   ModalBody,
@@ -25,6 +26,7 @@ import {
   SimpleGrid,
   Spinner,
   Text,
+  Tooltip,
   VStack,
   useDisclosure,
 } from "@chakra-ui/react";
@@ -108,6 +110,14 @@ function seconds(value: number) {
   return `${value.toFixed(3)} s`;
 }
 
+function formatDuration(value: number) {
+  const minutes = Math.floor(value / 60);
+  const remainder = value - minutes * 60;
+  return minutes > 0
+    ? `${minutes}:${remainder.toFixed(1).padStart(4, "0")}`
+    : `${remainder.toFixed(1)} s`;
+}
+
 export function EditorPage() {
   const { projectId } = useParams();
   const activeProjectId = projectId ?? "";
@@ -153,6 +163,10 @@ export function EditorPage() {
         ?.duration ?? null)
     : null;
   const quickPreviewOccurrence = occurrences[quickPreviewIndex] ?? null;
+  const totalTimelineSeconds = occurrences.reduce(
+    (total, item) => total + Math.max(0, item.end - item.start),
+    0,
+  );
   const quickPreviewVideoUrl =
     isQuickPreviewOpen && quickPreviewOccurrence
       ? getMediaUrl(activeProjectId, quickPreviewOccurrence.file)
@@ -637,7 +651,7 @@ export function EditorPage() {
         columns={{ base: 1, xl: 2 }}
         templateColumns={{
           base: "minmax(0, 1fr)",
-          xl: "minmax(0, 0.4fr) minmax(0, 0.6fr)",
+          xl: "minmax(0, 0.45fr) minmax(0, 0.55fr)",
         }}
         spacing={6}
         alignItems="start"
@@ -796,7 +810,10 @@ export function EditorPage() {
         <VStack align="stretch" spacing={2} order={{ base: 0, xl: 1 }}>
           <HStack justify="space-between">
             <Heading size="md">Timeline</Heading>
-            <Text color="gray.600">{occurrences.length} occurrences</Text>
+            <Text color="gray.600">
+              {occurrences.length} occurrences ·{" "}
+              {formatDuration(totalTimelineSeconds)} total
+            </Text>
           </HStack>
           <Box
             minH={0}
@@ -818,31 +835,63 @@ export function EditorPage() {
                   borderRadius="md"
                   bg="white"
                   px={3}
-                  py={2}
+                  py={3}
                 >
                   <HStack justify="space-between" spacing={3}>
-                    <Button
-                      variant="link"
-                      color="gray.900"
-                      whiteSpace="normal"
-                      height="auto"
-                      minWidth={0}
-                      textAlign="left"
-                      onClick={() => setSelectedId(item.id)}
-                    >
-                      <HStack spacing={3} align="baseline">
-                        <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
-                          {index + 1}. {item.file.split("/").at(-1)}
-                        </Text>
-                        <Text
-                          fontSize="xs"
-                          color="gray.600"
-                          whiteSpace="nowrap"
-                        >
-                          {seconds(item.start)} → {seconds(item.end)}
-                        </Text>
-                      </HStack>
-                    </Button>
+                    <Tooltip label={item.file} placement="top" openDelay={400}>
+                      <Button
+                        variant="link"
+                        color="gray.900"
+                        whiteSpace="normal"
+                        height="auto"
+                        minWidth={0}
+                        textAlign="left"
+                        onClick={() => setSelectedId(item.id)}
+                      >
+                        <HStack spacing={2} align="center" minWidth={0}>
+                          <Box
+                            width="50px"
+                            height="28px"
+                            flexShrink={0}
+                            borderRadius="sm"
+                            overflow="hidden"
+                            bg="gray.100"
+                          >
+                            {(() => {
+                              const thumbnailUrl = clipByPath.get(
+                                projectClipPath(item.file, clipsPrefix),
+                              )?.thumbnail_url;
+                              return thumbnailUrl ? (
+                                <Image
+                                  src={thumbnailUrl}
+                                  alt=""
+                                  loading="lazy"
+                                  objectFit="cover"
+                                  width="100%"
+                                  height="100%"
+                                />
+                              ) : null;
+                            })()}
+                          </Box>
+                          <HStack spacing={3} align="baseline" minWidth={0}>
+                            <Text
+                              fontSize="sm"
+                              fontWeight="semibold"
+                              noOfLines={1}
+                            >
+                              {index + 1}. {item.file.split("/").at(-1)}
+                            </Text>
+                            <Text
+                              fontSize="xs"
+                              color="gray.600"
+                              whiteSpace="nowrap"
+                            >
+                              {seconds(item.start)} → {seconds(item.end)}
+                            </Text>
+                          </HStack>
+                        </HStack>
+                      </Button>
+                    </Tooltip>
                     <HStack spacing={0} flexShrink={0}>
                       <IconButton
                         size="sm"
